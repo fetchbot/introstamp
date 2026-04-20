@@ -1,0 +1,59 @@
+# Xcode
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+**/*.playground/timeline.xctimeline
+
+# Swift Package Manager
+/.build
+/Packages
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+Package.resolved
+
+# Build artifacts
+build/
+dist/
+*.app
+*.dSYM/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+.netrc
+
+# macOS
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Debug
+*.log
+debug.txt
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# Profiler
+perf-traces/
