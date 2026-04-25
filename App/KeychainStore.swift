@@ -4,7 +4,8 @@ import Security
 
 struct KeychainStore {
     enum Key: String {
-        case introDBAPIKey = "theintrodb_api_key"
+        case theIntroDBAPIKey = "theintrodb_api_key"
+        case introDBAPIKey = "introdb_api_key"
         case tmdbAPIKey = "tmdb_api_key"
     }
 

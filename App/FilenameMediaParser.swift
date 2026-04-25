@@ -10,8 +10,8 @@ enum FilenameMediaParser {
     ]
 
     // Pre-compiled regex patterns for performance
-    private static let seasonEpisodeStandardRegex = try! NSRegularExpression(pattern: #"\bS(\d{1,2})E(\d{1,2})\b"#, options: [.caseInsensitive])
-    private static let seasonEpisodeAlternateRegex = try! NSRegularExpression(pattern: #"\b(\d{1,2})x(\d{1,2})\b"#, options: [.caseInsensitive])
+    private static let seasonEpisodeStandardRegex = try! NSRegularExpression(pattern: #"\bS(\d{1,4})E(\d{1,4})\b"#, options: [.caseInsensitive])
+    private static let seasonEpisodeAlternateRegex = try! NSRegularExpression(pattern: #"\b(\d{1,4})x(\d{1,4})\b"#, options: [.caseInsensitive])
     private static let yearRegex = try! NSRegularExpression(pattern: #"\b(19\d{2}|20\d{2})\b"#)
 
     static func parse(url: URL) -> ParsedFilenameHint {

@@ -21,9 +21,18 @@ final class PlayerTimelineEngine {
 
     private var periodicObserver: Any?
     private let waveformExtractor = WaveformExtractor()
+    private let musicLikelihoodExtractor = WaveformExtractor()
     private var currentTempVideoURL: URL?
     private var currentLoadID = UUID()
     private var currentWaveformAnalysisID = UUID()
+    private var seekSequence: UInt64 = 0
+    private var pendingSeekTargetMs: Int?
+    private var videoLoadTask: Task<Void, Never>?
+    private var remoteCopyTask: Task<Bool, Never>?
+    private var remoteCopyTaskID = UUID()
+    private var musicLikelihoodTask: Task<Void, Never>?
+    private var timeControlStatusObservation: NSKeyValueObservation?
+    private var frameDurationSeconds: Double = 0
 
     init() {
         NotificationCenter.default.addObserver(
@@ -40,6 +49,10 @@ final class PlayerTimelineEngine {
     }
 
     func loadVideo(url: URL) {
+        videoLoadTask?.cancel()
+        remoteCopyTask?.cancel()
+        remoteCopyTaskID = UUID()
+        musicLikelihoodTask?.cancel()
         clearObserver()
         deleteTempVideoFile()
         let loadID = UUID()
@@ -55,11 +68,18 @@ final class PlayerTimelineEngine {
         musicLikelihoodBuckets = []
         isLoadingWaveform = true
         currentVideoAssetURL = url
+        frameDurationSeconds = 0
 
         addPeriodicObserver(to: player)
+        addTimeControlStatusObserver(to: player)
 
-        Task {
+        videoLoadTask = Task { [weak self] in
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            await loadFrameDuration(from: item.asset)
+            guard !Task.isCancelled else { return }
             await loadDuration(from: item.asset)
+            guard !Task.isCancelled else { return }
 
             if isRemoteURL(url) {
                 guard let localURL = await localVideoURL(for: url) else {
@@ -91,7 +111,24 @@ final class PlayerTimelineEngine {
         guard let player else { return }
         let bounded = max(0, min(ms, durationMs > 0 ? durationMs : ms))
         let target = CMTime(value: CMTimeValue(bounded), timescale: 1000)
-        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+
+        seekSequence &+= 1
+        let activeSeekSequence = seekSequence
+        pendingSeekTargetMs = bounded
+        player.currentItem?.cancelPendingSeeks()
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard activeSeekSequence == self.seekSequence else { return }
+                guard finished else {
+                    self.pendingSeekTargetMs = nil
+                    return
+                }
+
+                self.pendingSeekTargetMs = nil
+                self.currentTimeMs = self.displayTimeMs(for: player, observedSeconds: player.currentTime().seconds)
+            }
+        }
         currentTimeMs = bounded
     }
 
@@ -101,7 +138,28 @@ final class PlayerTimelineEngine {
         periodicObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.currentTimeMs = max(0, Int((time.seconds * 1000).rounded()))
+                let observedTimeMs = self.displayTimeMs(for: player, observedSeconds: time.seconds)
+
+                if let pendingSeekTargetMs = self.pendingSeekTargetMs {
+                    let isNearPendingTarget = abs(observedTimeMs - pendingSeekTargetMs) <= 33
+                    if !isNearPendingTarget {
+                        return
+                    }
+                    self.pendingSeekTargetMs = nil
+                }
+
+                self.currentTimeMs = observedTimeMs
+            }
+        }
+    }
+
+    private func addTimeControlStatusObserver(to player: AVPlayer) {
+        timeControlStatusObservation?.invalidate()
+        timeControlStatusObservation = player.observe(\AVPlayer.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !self.isPlayerActivelyPlaying(player) else { return }
+                self.currentTimeMs = self.snappedFrameTimeMs(for: player.currentTime().seconds)
             }
         }
     }
@@ -111,6 +169,19 @@ final class PlayerTimelineEngine {
             player.removeTimeObserver(periodicObserver)
         }
         periodicObserver = nil
+        timeControlStatusObservation?.invalidate()
+        timeControlStatusObservation = nil
+    }
+
+    private func isPlayerActivelyPlaying(_ player: AVPlayer) -> Bool {
+        player.timeControlStatus == .playing && player.rate > 0
+    }
+
+    private func displayTimeMs(for player: AVPlayer, observedSeconds: Double) -> Int {
+        if isPlayerActivelyPlaying(player) {
+            return boundedTimeMs(Int((observedSeconds * 1000).rounded()))
+        }
+        return snappedFrameTimeMs(for: observedSeconds)
     }
 
     private func isRemoteURL(_ url: URL) -> Bool {
@@ -130,21 +201,67 @@ final class PlayerTimelineEngine {
         let fileName = "\(UUID().uuidString)-\(url.lastPathComponent)"
         let destURL = tempDir.appendingPathComponent(fileName)
 
-        let copied = await Task.detached(priority: .userInitiated) {
+        remoteCopyTask?.cancel()
+        let copyTaskID = UUID()
+        remoteCopyTaskID = copyTaskID
+        let copyTask = Task.detached(priority: .userInitiated) {
             do {
-                try FileManager.default.createDirectory(
-                    at: tempDir, withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: url, to: destURL)
+                try Task.checkCancellation()
+                try Self.copyFileCancellable(from: url, to: destURL, in: tempDir)
                 return true
+            } catch is CancellationError {
+                try? FileManager.default.removeItem(at: destURL)
+                return false
             } catch {
+                try? FileManager.default.removeItem(at: destURL)
                 return false
             }
-        }.value
+        }
+        remoteCopyTask = copyTask
+
+        let copied = await copyTask.value
+        guard remoteCopyTaskID == copyTaskID else {
+            try? FileManager.default.removeItem(at: destURL)
+            return nil
+        }
+        remoteCopyTask = nil
+        guard !Task.isCancelled else {
+            try? FileManager.default.removeItem(at: destURL)
+            return nil
+        }
 
         if copied {
             return destURL
         }
         return nil
+    }
+
+    private nonisolated static func copyFileCancellable(from sourceURL: URL, to destURL: URL, in tempDir: URL) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destURL.path) {
+            try fileManager.removeItem(at: destURL)
+        }
+        guard fileManager.createFile(atPath: destURL.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let sourceHandle = try FileHandle(forReadingFrom: sourceURL)
+        let destinationHandle = try FileHandle(forWritingTo: destURL)
+        defer {
+            try? sourceHandle.close()
+            try? destinationHandle.close()
+        }
+
+        let chunkSize = 1_048_576
+        while true {
+            try Task.checkCancellation()
+            let data = try sourceHandle.read(upToCount: chunkSize) ?? Data()
+            if data.isEmpty {
+                break
+            }
+            try destinationHandle.write(contentsOf: data)
+        }
     }
 
     private func switchPlayerToLocalCopy(_ localURL: URL) {
@@ -155,10 +272,32 @@ final class PlayerTimelineEngine {
         let replacement = AVPlayerItem(url: localURL)
         player.replaceCurrentItem(with: replacement)
         player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        Task { [weak self] in
+            guard let self else { return }
+            await loadFrameDuration(from: replacement.asset)
+        }
 
         if wasPlaying {
             player.play()
         }
+    }
+
+    private func boundedTimeMs(_ ms: Int) -> Int {
+        let bounded = max(0, ms)
+        guard durationMs > 0 else { return bounded }
+        return min(bounded, durationMs)
+    }
+
+    private func snappedFrameTimeMs(for seconds: Double) -> Int {
+        guard seconds.isFinite, seconds >= 0 else { return 0 }
+
+        guard frameDurationSeconds > 0 else {
+            return boundedTimeMs(Int((seconds * 1000).rounded()))
+        }
+
+        let frameIndex = max(0, Int((seconds / frameDurationSeconds).rounded()))
+        let snappedSeconds = Double(frameIndex) * frameDurationSeconds
+        return boundedTimeMs(Int((snappedSeconds * 1000).rounded()))
     }
 
     private func deleteTempVideoFile() {
@@ -179,8 +318,39 @@ final class PlayerTimelineEngine {
         }
     }
 
+    private func loadFrameDuration(from asset: AVAsset) async {
+        do {
+            let tracks = try await asset.loadTracks(withMediaType: .video)
+            guard let videoTrack = tracks.first else {
+                frameDurationSeconds = 0
+                return
+            }
+
+            let minFrameDuration = try await videoTrack.load(.minFrameDuration)
+            if minFrameDuration.isValid,
+               minFrameDuration.seconds.isFinite,
+               minFrameDuration.seconds > 0 {
+                frameDurationSeconds = minFrameDuration.seconds
+                return
+            }
+
+            let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+            let fps = Double(nominalFrameRate)
+            if fps.isFinite, fps > 0 {
+                frameDurationSeconds = 1.0 / fps
+                return
+            }
+
+            frameDurationSeconds = 0
+        } catch {
+            frameDurationSeconds = 0
+        }
+    }
+
     private func loadWaveform(from url: URL) async {
         defer { isLoadingWaveform = false }
+        musicLikelihoodTask?.cancel()
+        musicLikelihoodTask = nil
         let analysisID = UUID()
         currentWaveformAnalysisID = analysisID
 
@@ -193,6 +363,31 @@ final class PlayerTimelineEngine {
         do {
             let durationSnapshotMs = durationMs
             let capturedAnalysisID = analysisID
+            let bucketCount = Self.bucketCount(for: durationSnapshotMs)
+
+            if bucketCount > 0 {
+                musicLikelihoodBuckets = Array(repeating: 0.0, count: bucketCount)
+                musicLikelihoodTask = Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    guard !Task.isCancelled else { return }
+                    let rawLikelihood = await self.musicLikelihoodExtractor.extractMusicLikelihoodBuckets(
+                        from: url,
+                        bucketCount: bucketCount,
+                        durationMs: durationSnapshotMs,
+                        progressCallback: { @Sendable [weak self] partial in
+                            Task { @MainActor [weak self] in
+                                guard let self, self.currentWaveformAnalysisID == capturedAnalysisID else { return }
+                                self.musicLikelihoodBuckets = self.smoothBuckets(partial, radius: 2)
+                            }
+                        }
+                    )
+                    guard !Task.isCancelled else { return }
+                    let smoothed = self.smoothBuckets(rawLikelihood, radius: 2)
+                    guard self.currentWaveformAnalysisID == capturedAnalysisID else { return }
+                    self.musicLikelihoodBuckets = smoothed
+                }
+            }
+
             let buckets = try await waveformExtractor.extractWaveformBuckets(
                 from: url,
                 durationMs: durationSnapshotMs,
@@ -206,26 +401,9 @@ final class PlayerTimelineEngine {
             guard currentWaveformAnalysisID == analysisID else { return }
 
             waveformBuckets = buckets
-            musicLikelihoodBuckets = Array(repeating: 0.0, count: buckets.count)
 
-            guard !buckets.isEmpty else { return }
-
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let rawLikelihood = await self.waveformExtractor.extractMusicLikelihoodBuckets(
-                    from: url,
-                    bucketCount: buckets.count,
-                    durationMs: durationSnapshotMs,
-                    progressCallback: { @Sendable [weak self] partial in
-                        Task { @MainActor [weak self] in
-                            guard let self, self.currentWaveformAnalysisID == capturedAnalysisID else { return }
-                            self.musicLikelihoodBuckets = self.smoothBuckets(partial, radius: 2)
-                        }
-                    }
-                )
-                let smoothed = self.smoothBuckets(rawLikelihood, radius: 2)
-                guard self.currentWaveformAnalysisID == capturedAnalysisID else { return }
-                self.musicLikelihoodBuckets = smoothed
+            if !buckets.isEmpty, musicLikelihoodBuckets.count != buckets.count {
+                musicLikelihoodBuckets = Array(repeating: 0.0, count: buckets.count)
             }
         } catch {
             waveformBuckets = []
@@ -235,25 +413,33 @@ final class PlayerTimelineEngine {
 
     func reloadMusicLikelihood() async {
         guard let url = currentVideoAssetURL, !waveformBuckets.isEmpty else { return }
+        musicLikelihoodTask?.cancel()
         let analysisID = UUID()
         currentWaveformAnalysisID = analysisID
         let capturedAnalysisID = analysisID
         let bucketCount = waveformBuckets.count
         let durationSnapshotMs = durationMs
-        let rawLikelihood = await waveformExtractor.extractMusicLikelihoodBuckets(
-            from: url,
-            bucketCount: bucketCount,
-            durationMs: durationSnapshotMs,
-            progressCallback: { @Sendable [weak self] partial in
-                Task { @MainActor [weak self] in
-                    guard let self, self.currentWaveformAnalysisID == capturedAnalysisID else { return }
-                    self.musicLikelihoodBuckets = self.smoothBuckets(partial, radius: 2)
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            let rawLikelihood = await self.musicLikelihoodExtractor.extractMusicLikelihoodBuckets(
+                from: url,
+                bucketCount: bucketCount,
+                durationMs: durationSnapshotMs,
+                progressCallback: { @Sendable [weak self] partial in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.currentWaveformAnalysisID == capturedAnalysisID else { return }
+                        self.musicLikelihoodBuckets = self.smoothBuckets(partial, radius: 2)
+                    }
                 }
-            }
-        )
-        let smoothed = smoothBuckets(rawLikelihood, radius: 2)
-        guard currentWaveformAnalysisID == analysisID else { return }
-        musicLikelihoodBuckets = smoothed
+            )
+            guard !Task.isCancelled else { return }
+            let smoothed = self.smoothBuckets(rawLikelihood, radius: 2)
+            guard self.currentWaveformAnalysisID == analysisID else { return }
+            self.musicLikelihoodBuckets = smoothed
+        }
+        musicLikelihoodTask = task
+        await task.value
     }
 
     private func smoothBuckets(_ input: [Double], radius: Int) -> [Double] {
@@ -279,6 +465,11 @@ final class PlayerTimelineEngine {
 
         return output
     }
+
+    nonisolated static func bucketCount(for durationMs: Int) -> Int {
+        guard durationMs > 0 else { return 0 }
+        return max(120, min(2400, durationMs / 250))
+    }
 }
 
 actor WaveformExtractor {
@@ -301,7 +492,7 @@ actor WaveformExtractor {
             return []
         }
 
-        let bucketCount = max(120, min(2400, durationMs / 250))
+        let bucketCount = PlayerTimelineEngine.bucketCount(for: durationMs)
         var buckets = Array(repeating: 0.0, count: bucketCount)
 
         let reader = try AVAssetReader(asset: asset)
@@ -496,13 +687,13 @@ private final class AudioLikelihoodObserver: NSObject, SNResultsObserving {
         guard let classificationResult = result as? SNClassificationResult else { return }
         let musicConfidence = highestConfidence(
             in: classificationResult,
-            matchingAnyOf: ["music"],
-            excluding: ["speech", "spoken", "voice", "vocal", "sing"]
+            matchingAnyOf: ["music", "singing", "choir", "yodeling", "rapping", "humming", "whistling"],
+            excluding: ["speech", "spoken", "voice"]
         )
         let speechConfidence = highestConfidence(
             in: classificationResult,
             matchingAnyOf: ["speech", "spoken", "dialog", "dialogue", "voice", "narration", "conversation"],
-            excluding: ["sing", "singer", "vocal music"]
+            excluding: ["sing", "choir", "yodel", "rapping", "humming", "whistling", "music"]
         )
 
         guard musicConfidence > 0 || speechConfidence > 0 else { return }

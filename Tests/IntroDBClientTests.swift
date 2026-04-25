@@ -32,7 +32,7 @@ final class IntroDBClientTests: XCTestCase {
             return (response, data)
         }
 
-        let client = IntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
+        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
 
         let response = try await client.fetchMedia(
             query: MediaQuery(tmdbId: 95479, imdbId: nil, season: 1, episode: 10),
@@ -63,9 +63,9 @@ final class IntroDBClientTests: XCTestCase {
             return (response, data)
         }
 
-        let client = IntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
+        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
 
-        let request = IntroDBSubmissionRequest(
+        let request = TheIntroDBSubmissionRequest(
             tmdbId: 123,
             type: .movie,
             segment: .intro,
@@ -79,12 +79,66 @@ final class IntroDBClientTests: XCTestCase {
         do {
             _ = try await client.submit(request, apiKey: "key-123")
             XCTFail("Expected submit to fail")
-        } catch let error as IntroDBClientError {
+        } catch let error as APIClientError {
             XCTAssertEqual(error.statusCode, 409)
             XCTAssertTrue(error.message.contains("duplicate"))
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
+    }
+
+    func testIntroDBV1FetchDecodesSegments() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-API-Key"), "idb_test")
+            XCTAssertTrue(request.url?.absoluteString.contains("imdb_id=tt0944947") == true)
+            XCTAssertTrue(request.url?.absoluteString.contains("season=1") == true)
+            XCTAssertTrue(request.url?.absoluteString.contains("episode=1") == true)
+
+            let json = #"{"imdb_id":"tt0944947","season":1,"episode":1,"intro":{"start_ms":1000,"end_ms":61000,"confidence":0.9,"submission_count":5},"recap":null,"outro":{"start_ms":3200000,"end_ms":3300000,"confidence":0.8,"submission_count":2}}"#
+            let data = Data(json.utf8)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let client = IntroDBClient(baseURL: URL(string: "https://example.com")!, session: makeSession())
+        let response = try await client.fetchSegments(imdbId: "tt0944947", season: 1, episode: 1, apiKey: "idb_test")
+
+        XCTAssertEqual(response.payload.imdbId, "tt0944947")
+        XCTAssertEqual(response.payload.intro?.startMs, 1_000)
+        XCTAssertEqual(response.payload.outro?.endMs, 3_300_000)
+
+        let grouped = response.payload.groupedSegments()
+        XCTAssertEqual(grouped[.credits]?.first?.startMs, 3_200_000)
+        XCTAssertEqual(grouped[.preview]?.count, 0)
+    }
+
+    func testIntroDBV1SubmitUsesXAPIKeyHeader() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-API-Key"), "idb_submit")
+
+            let json = #"{"ok":true,"submission":{"id":"550e8400-e29b-41d4-a716-446655440123","status":"pending","weight":1}}"#
+            let data = Data(json.utf8)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let client = IntroDBClient(baseURL: URL(string: "https://example.com")!, session: makeSession())
+        let request = IntroDBSubmissionRequest(
+            segmentType: .intro,
+            imdbId: "tt0903747",
+            season: 1,
+            episode: 1,
+            startSec: 1.5,
+            endSec: 40.0,
+            tvdbId: nil,
+            tmdbId: nil
+        )
+
+        let response = try await client.submit(request, apiKey: "idb_submit")
+        XCTAssertTrue(response.payload.ok)
+        XCTAssertEqual(response.payload.submission.status, .pending)
     }
 
     private func makeSession() -> URLSession {

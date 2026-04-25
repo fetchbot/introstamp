@@ -10,7 +10,7 @@
 		4C36CF542F8ACD87003409D3 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF412F8AC818003409D3 /* AppModel.swift */; };
 		4C36CF552F8ACD99003409D3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF432F8AC818003409D3 /* ContentView.swift */; };
 		4C36CF562F8ACD99003409D3 /* FilenameMediaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */; };
-		4C36CF572F8ACD99003409D3 /* IntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF462F8AC818003409D3 /* IntroDBClient.swift */; };
+		4C36CF572F8ACD99003409D3 /* TheIntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */; };
 		4C36CF582F8ACD99003409D3 /* IntroStampApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF472F8AC818003409D3 /* IntroStampApp.swift */; };
 		4C36CF592F8ACD99003409D3 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF482F8AC818003409D3 /* KeychainStore.swift */; };
 		4C36CF5A2F8ACD99003409D3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF492F8AC818003409D3 /* Models.swift */; };
@@ -21,6 +21,7 @@
 		4C36CF5F2F8ACD99003409D3 /* TMDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4E2F8AC818003409D3 /* TMDBClient.swift */; };
 		4C8129932F92E0D800F9740B /* IntroStamp.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4C8129922F92E0D800F9740B /* IntroStamp.icon */; };
 		4CDCE2E12F93966500525FCB /* GeneratedSegmentScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDCE2E02F93966500525FCB /* GeneratedSegmentScenarioTests.swift */; };
+		A1B2C3D42F9A100100000001 /* IntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D52F9A100100000001 /* IntroDBClient.swift */; };
 		A8C71D1D1A0D4B5C9E001001 /* FilenameMediaParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF502F8AC818003409D3 /* FilenameMediaParserTests.swift */; };
 		A8C71D1D1A0D4B5C9E001002 /* IntroDBClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF512F8AC818003409D3 /* IntroDBClientTests.swift */; };
 /* End PBXBuildFile section */
@@ -39,7 +40,7 @@
 		4C36CF412F8AC818003409D3 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		4C36CF432F8AC818003409D3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameMediaParser.swift; sourceTree = "<group>"; };
-		4C36CF462F8AC818003409D3 /* IntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClient.swift; sourceTree = "<group>"; };
+		4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheIntroDBClient.swift; sourceTree = "<group>"; };
 		4C36CF472F8AC818003409D3 /* IntroStampApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroStampApp.swift; sourceTree = "<group>"; };
 		4C36CF482F8AC818003409D3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		4C36CF492F8AC818003409D3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -54,6 +55,7 @@
 		4CDCE2E02F93966500525FCB /* GeneratedSegmentScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedSegmentScenarioTests.swift; sourceTree = "<group>"; };
 		4E32CF7DA87E2CFE15B2460C /* IntroStampTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntroStampTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		98935A23629A6C126BE2AD4C /* IntroStamp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IntroStamp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D52F9A100100000001 /* IntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -63,7 +65,8 @@
 				4C36CF412F8AC818003409D3 /* AppModel.swift */,
 				4C36CF432F8AC818003409D3 /* ContentView.swift */,
 				4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */,
-				4C36CF462F8AC818003409D3 /* IntroDBClient.swift */,
+				4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */,
+				A1B2C3D52F9A100100000001 /* IntroDBClient.swift */,
 				4C36CF472F8AC818003409D3 /* IntroStampApp.swift */,
 				4C36CF482F8AC818003409D3 /* KeychainStore.swift */,
 				4C36CF492F8AC818003409D3 /* Models.swift */,
@@ -191,7 +194,8 @@
 			files = (
 				4C36CF552F8ACD99003409D3 /* ContentView.swift in Sources */,
 				4C36CF562F8ACD99003409D3 /* FilenameMediaParser.swift in Sources */,
-				4C36CF572F8ACD99003409D3 /* IntroDBClient.swift in Sources */,
+				4C36CF572F8ACD99003409D3 /* TheIntroDBClient.swift in Sources */,
+				A1B2C3D42F9A100100000001 /* IntroDBClient.swift in Sources */,
 				4C36CF582F8ACD99003409D3 /* IntroStampApp.swift in Sources */,
 				4C36CF592F8ACD99003409D3 /* KeychainStore.swift in Sources */,
 				4C36CF5A2F8ACD99003409D3 /* Models.swift in Sources */,
@@ -228,7 +232,7 @@
 		2FBB2CA1493AC786FB9C4AF9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = arm64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = IntroStamp;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -242,6 +246,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp;
 				PRODUCT_NAME = IntroStamp;
 				SDKROOT = macosx;
@@ -334,7 +339,7 @@
 		A179C042E72CEC876FC91F20 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = arm64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = IntroStamp;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -348,6 +353,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp;
 				PRODUCT_NAME = IntroStamp;
 				SDKROOT = macosx;

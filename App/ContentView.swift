@@ -26,19 +26,23 @@ private struct SidebarPane: View {
     @State private var isAPIKeysSectionExpanded: Bool = false
 
     private var introAPIKeyIsFilled: Bool {
-        !model.introDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !model.theIntroDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var tmdbAPIKeyIsFilled: Bool {
         !model.tmdbAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var apiKeyFillCount: Int {
-        (introAPIKeyIsFilled ? 1 : 0) + (tmdbAPIKeyIsFilled ? 1 : 0)
+    private var introDBAPIKeyIsFilled: Bool {
+        !model.introDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var areBothAPIKeysFilled: Bool {
-        apiKeyFillCount == 2
+    private var apiKeyFillCount: Int {
+        (introAPIKeyIsFilled ? 1 : 0) + (introDBAPIKeyIsFilled ? 1 : 0) + (tmdbAPIKeyIsFilled ? 1 : 0)
+    }
+
+    private var areAllAPIKeysFilled: Bool {
+        apiKeyFillCount == 3
     }
 
     var body: some View {
@@ -141,12 +145,12 @@ private struct SidebarPane: View {
         GroupBox("API Keys") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Image(systemName: areBothAPIKeysFilled ? "key.fill" : "key")
+                    Image(systemName: areAllAPIKeysFilled ? "key.fill" : "key")
                         .foregroundStyle(.secondary)
-                    Text(areBothAPIKeysFilled ? "API keys configured" : "API keys")
+                    Text(areAllAPIKeysFilled ? "API keys configured" : "API keys")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("\(apiKeyFillCount)/2")
+                    Text("\(apiKeyFillCount)/3")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
@@ -156,7 +160,7 @@ private struct SidebarPane: View {
                                 .fill(Color.secondary.opacity(0.15))
                         )
                     Spacer()
-                    if areBothAPIKeysFilled {
+                    if areAllAPIKeysFilled {
                         Button(isAPIKeysSectionExpanded ? "Collapse" : "Edit") {
                             isAPIKeysSectionExpanded.toggle()
                         }
@@ -164,8 +168,10 @@ private struct SidebarPane: View {
                     }
                 }
 
-                if isAPIKeysSectionExpanded || !areBothAPIKeysFilled {
-                    SecureField("TheIntroDB API key", text: $model.introDBAPIKey)
+                if isAPIKeysSectionExpanded || !areAllAPIKeysFilled {
+                    SecureField("TheIntroDB API key", text: $model.theIntroDBAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                    SecureField("IntroDB API key", text: $model.introDBAPIKey)
                         .textFieldStyle(.roundedBorder)
                     SecureField("TMDB API key", text: $model.tmdbAPIKey)
                         .textFieldStyle(.roundedBorder)
@@ -175,7 +181,7 @@ private struct SidebarPane: View {
                             model.loadKeysFromKeychain()
                         } else {
                             model.saveKeysToKeychain()
-                            if areBothAPIKeysFilled {
+                            if areAllAPIKeysFilled {
                                 isAPIKeysSectionExpanded = false
                             }
                         }
@@ -431,6 +437,7 @@ private struct DetailPane: View {
                 Button("") { model.setDraftEnd(.credits)   }.keyboardShortcut("C", modifiers: .shift)
                 Button("") { model.setDraftStart(.preview) }.keyboardShortcut("p", modifiers: [])
                 Button("") { model.setDraftEnd(.preview)   }.keyboardShortcut("P", modifiers: .shift)
+                Button("") { model.moveNearestSegmentEndToPlayhead() }.keyboardShortcut(",", modifiers: [])
                 Button("") { model.requestPlayerFocus() }.keyboardShortcut(.escape, modifiers: [])
             }
             .opacity(0)
@@ -500,6 +507,9 @@ private struct TimelineUXHelpCard: View {
                     shortcutChip("P", "Preview start")
                     shortcutChip("⇧P", "Preview end")
                 }
+                HStack(spacing: 8) {
+                    shortcutChip(",", "Move nearest boundary")
+                }
             }
 
             Divider()
@@ -515,6 +525,7 @@ private struct TimelineUXHelpCard: View {
                 uxHint("arrow.up.and.down.and.arrow.left.and.right", "⇧ + Drag on draft bar", "Move complete segment and change row/type")
                 uxHint("arrowtriangle.left.and.line.vertical.and.arrowtriangle.right.fill", "Drag segment edges", "Adjust start and end")
                 uxHint("arrow.down.to.line.compact", "Set icon beside time fields", "Copy current playhead into start/end")
+                uxHint("scope", "Scope icon", "Jump playhead to boundary")
                 uxHint("arrow.up.and.down", "Vertical trackpad scroll", "Zoom timeline")
             }
         }
@@ -1349,6 +1360,15 @@ private struct SegmentEditorRow: View {
                             model.updateDraftStartText(segment, index: index, text: text)
                         }
                         Button {
+                            jumpToDraftTime(draft.startMs)
+                        } label: {
+                            Image(systemName: "scope")
+                        }
+                        .buttonStyle(.plain)
+                        .help("Jump playhead to start")
+                        .disabled(draft.startMs == nil)
+
+                        Button {
                             model.setDraftStartMs(segment, index: index, ms: model.timeline.currentTimeMs)
                         } label: {
                             Image(systemName: "arrow.down.to.line.compact")
@@ -1361,6 +1381,15 @@ private struct SegmentEditorRow: View {
                         DraftTimeField(value: draft.endMs, placeholder: "End") { text in
                             model.updateDraftEndText(segment, index: index, text: text)
                         }
+                        Button {
+                            jumpToDraftTime(draft.endMs)
+                        } label: {
+                            Image(systemName: "scope")
+                        }
+                        .buttonStyle(.plain)
+                        .help("Jump playhead to end")
+                        .disabled(draft.endMs == nil)
+
                         Button {
                             model.setDraftEndMs(segment, index: index, ms: model.timeline.currentTimeMs)
                         } label: {
@@ -1414,5 +1443,11 @@ private struct SegmentEditorRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func jumpToDraftTime(_ value: Int?) {
+        guard let value else { return }
+        model.seekTimeline(to: value)
+        model.requestPlayerFocus()
     }
 }

@@ -1,18 +1,35 @@
 import Foundation
 
-actor IntroDBClient {
+struct ServiceResponse<T: Sendable>: Sendable {
+    var payload: T
+    var usage: UsageHeaders?
+}
+
+struct APIClientError: LocalizedError, Sendable {
+    var statusCode: Int?
+    var message: String
+    var usage: UsageHeaders?
+
+    var errorDescription: String? { message }
+}
+
+actor TheIntroDBClient {
     private let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let maxAttempts = 3
     private let retryableStatusCodes: Set<Int> = [429, 503]
+    private var lastRateLimitReset: Date = .distantPast
+    private var rateLimitRemaining: Int = Int.max
 
-    init(baseURL: URL = URL(string: "http://api.introdb.app")!, session: URLSession = makeOptimizedSession()) {
+    init(baseURL: URL = URL(string: "https://api.theintrodb.org/v2")!, session: URLSession = makeOptimizedSession()) {
         self.baseURL = baseURL
         self.session = session
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        self.decoder = decoder
+        self.encoder = encoder
     }
 
     private static func makeOptimizedSession() -> URLSession {
@@ -25,55 +42,74 @@ actor IntroDBClient {
         return URLSession(configuration: config)
     }
 
-    func fetchSegments(imdbId: String, season: Int, episode: Int, apiKey: String?) async throws -> ServiceResponse<IntroDBMediaResponse> {
-        var components = URLComponents(url: baseURL.appending(path: "segments"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "imdb_id", value: imdbId),
-            URLQueryItem(name: "season", value: String(season)),
-            URLQueryItem(name: "episode", value: String(episode))
-        ]
+    func fetchMedia(query: MediaQuery, apiKey: String?) async throws -> ServiceResponse<TheIntroDBMediaResponse> {
+        await waitForRateLimit()
+
+        var components = URLComponents(url: baseURL.appending(path: "media"), resolvingAgainstBaseURL: false)
+        var items: [URLQueryItem] = []
+
+        if let tmdbId = query.tmdbId {
+            items.append(URLQueryItem(name: "tmdb_id", value: String(tmdbId)))
+        }
+        if let imdbId = trimmed(query.imdbId) {
+            items.append(URLQueryItem(name: "imdb_id", value: imdbId))
+        }
+        if let season = query.season {
+            items.append(URLQueryItem(name: "season", value: String(season)))
+        }
+        if let episode = query.episode {
+            items.append(URLQueryItem(name: "episode", value: String(episode)))
+        }
+
+        components?.queryItems = items.isEmpty ? nil : items
 
         guard let url = components?.url else {
-            throw APIClientError(statusCode: nil, message: "Failed to build IntroDB URL", usage: nil)
+            throw APIClientError(statusCode: nil, message: "Failed to build media URL", usage: nil)
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        applyAPIKeyIfPresent(&request, apiKey: apiKey)
+        applyAuthIfPresent(&request, apiKey: apiKey)
 
         return try await performWithRetry {
             let (data, response) = try await session.data(for: request)
-            return try decodeResponse(data: data, response: response, as: IntroDBMediaResponse.self)
+            let result = try decodeResponse(data: data, response: response, as: TheIntroDBMediaResponse.self)
+            updateRateLimitFromUsage(result.usage)
+            return result
         }
     }
 
-    func submit(_ requestBody: IntroDBSubmissionRequest, apiKey: String) async throws -> ServiceResponse<IntroDBSubmissionResponse> {
+    func submit(_ requestBody: TheIntroDBSubmissionRequest, apiKey: String) async throws -> ServiceResponse<TheIntroDBSubmissionResponse> {
+        await waitForRateLimit()
+
         let url = baseURL.appending(path: "submit")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         do {
             request.httpBody = try encoder.encode(requestBody)
         } catch {
-            throw APIClientError(statusCode: nil, message: "Failed to encode IntroDB submit payload", usage: nil)
+            throw APIClientError(statusCode: nil, message: "Failed to encode submit payload", usage: nil)
         }
 
         return try await performWithRetry {
             let (data, response) = try await session.data(for: request)
-            return try decodeResponse(data: data, response: response, as: IntroDBSubmissionResponse.self)
+            let result = try decodeResponse(data: data, response: response, as: TheIntroDBSubmissionResponse.self)
+            updateRateLimitFromUsage(result.usage)
+            return result
         }
     }
 
-    private func applyAPIKeyIfPresent(_ request: inout URLRequest, apiKey: String?) {
+    private func applyAuthIfPresent(_ request: inout URLRequest, apiKey: String?) {
         guard let apiKey = trimmed(apiKey) else { return }
-        request.addValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     }
 
     private func decodeResponse<T: Decodable>(data: Data, response: URLResponse, as type: T.Type) throws -> ServiceResponse<T> {
         guard let http = response as? HTTPURLResponse else {
-            throw APIClientError(statusCode: nil, message: "Invalid IntroDB server response", usage: nil)
+            throw APIClientError(statusCode: nil, message: "Invalid server response", usage: nil)
         }
 
         let usage = parseUsageHeaders(http)
@@ -83,7 +119,7 @@ actor IntroDBClient {
                 let payload = try decoder.decode(T.self, from: data)
                 return ServiceResponse(payload: payload, usage: usage)
             } catch {
-                throw APIClientError(statusCode: http.statusCode, message: "Failed to decode IntroDB server response", usage: usage)
+                throw APIClientError(statusCode: http.statusCode, message: "Failed to decode server response", usage: usage)
             }
         }
 
@@ -154,5 +190,22 @@ actor IntroDBClient {
     private func retryDelayNanoseconds(forAttempt attempt: Int) -> UInt64 {
         let delaySeconds = Double(1 << attempt) * 0.1
         return UInt64(delaySeconds * 1_000_000_000)
+    }
+
+    private func updateRateLimitFromUsage(_ usage: UsageHeaders?) {
+        guard let usage else { return }
+        if let remaining = usage.rateRemaining {
+            rateLimitRemaining = remaining
+        }
+        if let reset = usage.rateResetSeconds {
+            lastRateLimitReset = Date().addingTimeInterval(TimeInterval(reset))
+        }
+    }
+
+    private func waitForRateLimit() async {
+        let timeUntilReset = lastRateLimitReset.timeIntervalSinceNow
+        if rateLimitRemaining <= 1 && timeUntilReset > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(timeUntilReset * 1_000_000_000))
+        }
     }
 }

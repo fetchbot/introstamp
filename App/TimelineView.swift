@@ -759,6 +759,7 @@ private struct TimelineHelpPopover: View {
             Text("R / ⇧R: Recap start/end")
             Text("C / ⇧C: Credits start/end")
             Text("P / ⇧P: Preview start/end")
+            Text(",: Move nearest segment boundary to playhead")
 
             Divider()
 
@@ -770,6 +771,7 @@ private struct TimelineHelpPopover: View {
             Label("⇧ + Drag on draft bar: move full segment and change row/type", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
             Label("Drag segment edges: adjust start and end", systemImage: "arrowtriangle.left.and.line.vertical.and.arrowtriangle.right.fill")
             Label("Set icon beside time fields: copy playhead into start/end", systemImage: "arrow.down.to.line.compact")
+            Label("Scope icon in draft row: jump playhead to boundary", systemImage: "scope")
             Label("Vertical trackpad scroll: zoom timeline", systemImage: "arrow.up.and.down")
         }
         .font(.caption)

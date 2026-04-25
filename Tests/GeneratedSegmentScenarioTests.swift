@@ -526,6 +526,28 @@ final class GeneratedSegmentScenarioTests: XCTestCase {
         assertDraftExists(in: model.drafts(for: .preview), start: 80000, end: nil)
     }
 
+    @MainActor
+    func testMoveNearestSegmentEndToPlayhead_WithAdjacentSegments() {
+        let model = makeModel(drafts: [.credits: [SegmentDraft(startMs: 70000, endMs: 80000)], .preview: [SegmentDraft(startMs: 80000, endMs: 90000)]])
+        model.timeline.currentTimeMs = 79000
+        model.moveNearestSegmentEndToPlayhead()
+        assertDraftExists(in: model.drafts(for: .credits), start: 70000, end: 79000)
+        assertDraftExists(in: model.drafts(for: .preview), start: 79000, end: 90000)
+        XCTAssertEqual(model.drafts(for: .credits).count, 1)
+        XCTAssertEqual(model.drafts(for: .preview).count, 1)
+    }
+
+    @MainActor
+    func testMoveNearestSegmentStart_WithAdjacentSegments() {
+        let model = makeModel(drafts: [.credits: [SegmentDraft(startMs: 70000, endMs: 80000)], .preview: [SegmentDraft(startMs: 80000, endMs: 90000)]])
+        model.timeline.currentTimeMs = 81000
+        model.moveNearestSegmentEndToPlayhead()
+        assertDraftExists(in: model.drafts(for: .credits), start: 70000, end: 81000)
+        assertDraftExists(in: model.drafts(for: .preview), start: 81000, end: 90000)
+        XCTAssertEqual(model.drafts(for: .credits).count, 1)
+        XCTAssertEqual(model.drafts(for: .preview).count, 1)
+    }
+
     // MARK: - Helpers
 
     @MainActor

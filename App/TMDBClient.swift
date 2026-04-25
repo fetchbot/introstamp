@@ -45,9 +45,12 @@ actor TMDBClient {
             yearQueryName = "first_air_date_year"
         }
 
+        // Normalize title to NFC (precomposed) for TMDB API
+        let nfcTitle = hint.title.precomposedStringWithCanonicalMapping
+
         var components = URLComponents(url: baseURL.appending(path: endpoint), resolvingAgainstBaseURL: false)
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "query", value: hint.title),
+            URLQueryItem(name: "query", value: nfcTitle),
             URLQueryItem(name: "include_adult", value: "false")
         ]
 
@@ -77,11 +80,12 @@ actor TMDBClient {
         }
 
         let decoded = try decoder.decode(TMDBSearchResponse.self, from: data)
-        return decoded.results
+        let mapped = decoded.results
             .prefix(max(1, limit))
             .map { result in
                 AutoLookupResult(
                     tmdbId: result.id,
+                    imdbId: nil,
                     mediaType: hint.mediaTypeHint,
                     season: hint.season,
                     episode: hint.episode,
@@ -90,6 +94,7 @@ actor TMDBClient {
                     posterURL: posterURL(path: result.posterPath)
                 )
             }
+        return try await enrichWithIMDbIDs(results: mapped, mediaType: hint.mediaTypeHint, apiKey: cleanedKey)
     }
 
     func resolveHint(_ hint: ParsedFilenameHint, apiKey: String) async throws -> AutoLookupResult? {
@@ -128,11 +133,12 @@ actor TMDBClient {
             }
 
             let decoded = try decoder.decode(TMDBSearchResponse.self, from: data)
-            return decoded.results
+            let mapped = decoded.results
                 .prefix(max(1, limit))
                 .map { result in
                     AutoLookupResult(
                         tmdbId: result.id,
+                        imdbId: nil,
                         mediaType: mediaType,
                         season: nil,
                         episode: nil,
@@ -141,7 +147,60 @@ actor TMDBClient {
                         posterURL: posterURL(path: result.posterPath)
                     )
                 }
+            return try await enrichWithIMDbIDs(results: mapped, mediaType: mediaType, apiKey: cleanedKey)
         }
+
+    private func enrichWithIMDbIDs(results: [AutoLookupResult], mediaType: MediaType, apiKey: String) async throws -> [AutoLookupResult] {
+        guard !results.isEmpty else { return [] }
+
+        var enriched = Array(repeating: Optional<AutoLookupResult>.none, count: results.count)
+        try await withThrowingTaskGroup(of: (Int, String?).self) { group in
+            for (index, result) in results.enumerated() {
+                group.addTask {
+                    let imdbId = try await self.fetchIMDbID(mediaType: mediaType, tmdbId: result.tmdbId, apiKey: apiKey)
+                    return (index, imdbId)
+                }
+            }
+
+            for try await (index, imdbId) in group {
+                var item = results[index]
+                item.imdbId = imdbId
+                enriched[index] = item
+            }
+        }
+
+        return enriched.compactMap { $0 }
+    }
+
+    private func fetchIMDbID(mediaType: MediaType, tmdbId: Int, apiKey: String) async throws -> String? {
+        let pathPrefix = mediaType == .movie ? "movie" : "tv"
+        var components = URLComponents(
+            url: baseURL.appending(path: "\(pathPrefix)/\(tmdbId)/external_ids"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB external IDs URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        return try decoder.decode(TMDBExternalIDsResponse.self, from: data).imdbId
+    }
 
     private func posterURL(path: String?) -> URL? {
         guard let path, !path.isEmpty else { return nil }
@@ -182,5 +241,13 @@ private struct TMDBResult: Decodable {
         case releaseDate = "release_date"
         case firstAirDate = "first_air_date"
         case posterPath = "poster_path"
+    }
+}
+
+private struct TMDBExternalIDsResponse: Decodable {
+    var imdbId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case imdbId = "imdb_id"
     }
 }

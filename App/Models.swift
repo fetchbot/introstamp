@@ -122,7 +122,7 @@ struct IntroDBErrorPayload: Decodable, Sendable {
     var details: String?
 }
 
-struct IntroDBMediaResponse: Decodable, Sendable {
+struct TheIntroDBMediaResponse: Decodable, Sendable {
     var tmdbId: Int
     var type: MediaType
     var season: Int?
@@ -153,12 +153,12 @@ struct IntroDBMediaResponse: Decodable, Sendable {
     }
 }
 
-struct IntroDBSubmissionResponse: Decodable, Sendable {
+struct TheIntroDBSubmissionResponse: Decodable, Sendable {
     var ok: Bool
-    var submission: IntroDBSubmissionData
+    var submission: TheIntroDBSubmissionData
 }
 
-struct IntroDBSubmissionData: Decodable, Sendable {
+struct TheIntroDBSubmissionData: Decodable, Sendable {
     var id: UUID
     var tmdbId: Int
     var type: MediaType
@@ -190,7 +190,7 @@ enum SubmissionStatus: String, Codable, Sendable {
     case rejected
 }
 
-struct IntroDBSubmissionRequest: Encodable, Sendable {
+struct TheIntroDBSubmissionRequest: Encodable, Sendable {
     var tmdbId: Int
     var type: MediaType
     var segment: SegmentType
@@ -224,8 +224,137 @@ struct IntroDBSubmissionRequest: Encodable, Sendable {
     }
 }
 
+enum IntroDBSegmentType: String, Codable, Sendable {
+    case intro
+    case recap
+    case outro
+
+    init?(from segment: SegmentType) {
+        switch segment {
+        case .intro:
+            self = .intro
+        case .recap:
+            self = .recap
+        case .credits:
+            self = .outro
+        case .preview:
+            return nil
+        }
+    }
+
+    var appSegment: SegmentType {
+        switch self {
+        case .intro:
+            return .intro
+        case .recap:
+            return .recap
+        case .outro:
+            return .credits
+        }
+    }
+}
+
+struct IntroDBMediaResponse: Decodable, Sendable {
+    var imdbId: String
+    var season: Int
+    var episode: Int
+    var intro: IntroDBSegmentAggregate?
+    var recap: IntroDBSegmentAggregate?
+    var outro: IntroDBSegmentAggregate?
+
+    enum CodingKeys: String, CodingKey {
+        case imdbId = "imdb_id"
+        case season
+        case episode
+        case intro
+        case recap
+        case outro
+    }
+
+    func groupedSegments() -> [SegmentType: [SegmentRange]] {
+        let introRanges = intro.map { [SegmentRange(startMs: $0.startMs, endMs: $0.endMs)] } ?? []
+        let recapRanges = recap.map { [SegmentRange(startMs: $0.startMs, endMs: $0.endMs)] } ?? []
+        let creditsRanges = outro.map { [SegmentRange(startMs: $0.startMs, endMs: $0.endMs)] } ?? []
+
+        return [
+            .intro: introRanges,
+            .recap: recapRanges,
+            .credits: creditsRanges,
+            .preview: []
+        ]
+    }
+}
+
+struct IntroDBSegmentAggregate: Decodable, Sendable {
+    var startMs: Int
+    var endMs: Int
+    var startSec: Double?
+    var endSec: Double?
+    var confidence: Double?
+    var submissionCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case startMs = "start_ms"
+        case endMs = "end_ms"
+        case startSec = "start_sec"
+        case endSec = "end_sec"
+        case confidence
+        case submissionCount = "submission_count"
+    }
+}
+
+struct IntroDBSubmissionRequest: Encodable, Sendable {
+    var segmentType: IntroDBSegmentType
+    var imdbId: String
+    var season: Int
+    var episode: Int
+    var startSec: Double
+    var endSec: Double
+    var tvdbId: Int?
+    var tmdbId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case segmentType = "segment_type"
+        case imdbId = "imdb_id"
+        case season
+        case episode
+        case startSec = "start_sec"
+        case endSec = "end_sec"
+        case tvdbId = "tvdb_id"
+        case tmdbId = "tmdb_id"
+    }
+}
+
+struct IntroDBSubmissionResponse: Decodable, Sendable {
+    var ok: Bool
+    var submission: IntroDBSubmissionData
+}
+
+struct IntroDBSubmissionData: Decodable, Sendable {
+    var id: UUID
+    var imdbId: String?
+    var season: Int?
+    var episode: Int?
+    var startMs: Int?
+    var endMs: Int?
+    var status: SubmissionStatus?
+    var weight: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case imdbId
+        case season
+        case episode
+        case startMs
+        case endMs
+        case status
+        case weight
+    }
+}
+
 struct AutoLookupResult: Hashable, Sendable {
     var tmdbId: Int
+    var imdbId: String?
     var mediaType: MediaType
     var season: Int?
     var episode: Int?

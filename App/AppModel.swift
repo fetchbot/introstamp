@@ -8,6 +8,12 @@ import UniformTypeIdentifiers
 final class AppModel {
     private typealias SegmentDraftSnapshot = [SegmentType: [SegmentDraft]]
 
+    enum SegmentService: String {
+        case theIntroDB = "TheIntroDB"
+        case introDB = "IntroDB"
+    }
+
+    var theIntroDBAPIKey: String = ""
     var introDBAPIKey: String = ""
     var tmdbAPIKey: String = ""
 
@@ -60,6 +66,7 @@ final class AppModel {
 
     private let keychain: KeychainStore
     private let shouldAccessKeychain: Bool
+    private let theIntroDBClient: TheIntroDBClient
     private let introDBClient: IntroDBClient
     private let tmdbClient: TMDBClient
     private var shouldAutoFitZoomAfterLoad = true
@@ -72,10 +79,12 @@ final class AppModel {
     private var batchedSegmentChangeSnapshot: SegmentDraftSnapshot?
     private var isApplyingHistoryChange = false
     private let durationTemplateDefaultsKey = "segment_duration_templates_ms_v1"
+    private var pendingAutoDetectFetchTask: Task<Void, Never>?
 
     init(
         timeline: PlayerTimelineEngine = PlayerTimelineEngine(),
         keychain: KeychainStore = KeychainStore(),
+        theIntroDBClient: TheIntroDBClient = TheIntroDBClient(),
         introDBClient: IntroDBClient = IntroDBClient(),
         tmdbClient: TMDBClient = TMDBClient(),
         shouldAccessKeychain: Bool = !ProcessInfo.processInfo.isRunningTests
@@ -83,6 +92,7 @@ final class AppModel {
         self.timeline = timeline
         self.keychain = keychain
         self.shouldAccessKeychain = shouldAccessKeychain
+        self.theIntroDBClient = theIntroDBClient
         self.introDBClient = introDBClient
         self.tmdbClient = tmdbClient
 
@@ -93,7 +103,8 @@ final class AppModel {
     }
 
     var areAPIKeyFieldsEmpty: Bool {
-        introDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        theIntroDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && introDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && tmdbAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -196,6 +207,7 @@ final class AppModel {
     }
 
     func loadVideo(url: URL) {
+        pendingAutoDetectFetchTask?.cancel()
         selectedVideoURL = url
         videoTitle = url.lastPathComponent
         matchedPosterURL = nil
@@ -217,10 +229,13 @@ final class AppModel {
         if let season = parsed.season { seasonText = String(season) }
         if let episode = parsed.episode { episodeText = String(episode) }
 
-        Task {
-            let matched = await autoDetectMediaID(for: url)
+        let currentVideoLoadID = videoLoadID
+        pendingAutoDetectFetchTask = Task { [weak self] in
+            guard let self else { return }
+            let matched = await self.autoDetectMediaID(for: url)
+            guard !Task.isCancelled, self.videoLoadID == currentVideoLoadID else { return }
             if matched {
-                await fetchMedia(prefillDrafts: true)
+                await self.fetchMedia(prefillDrafts: true)
             }
         }
     }
@@ -312,6 +327,9 @@ final class AppModel {
     private func applyAutoLookupCandidate(_ candidate: AutoLookupResult) {
         selectedAutoLookupTMDBID = candidate.tmdbId
         tmdbIdText = String(candidate.tmdbId)
+        if let imdbId = candidate.imdbId {
+            imdbIdText = imdbId
+        }
         selectedMediaType = candidate.mediaType
         seasonText = candidate.season.map(String.init) ?? seasonText
         episodeText = candidate.episode.map(String.init) ?? episodeText
@@ -320,10 +338,11 @@ final class AppModel {
 
     func saveKeysToKeychain() {
         guard shouldAccessKeychain else { return }
+        let theIntroOk = keychain.set(theIntroDBAPIKey, for: .theIntroDBAPIKey)
         let introOk = keychain.set(introDBAPIKey, for: .introDBAPIKey)
         let tmdbOk = keychain.set(tmdbAPIKey, for: .tmdbAPIKey)
 
-        if introOk && tmdbOk {
+        if theIntroOk && introOk && tmdbOk {
             infoMessage = "API keys saved to Keychain"
             errorMessage = ""
         } else {
@@ -333,10 +352,15 @@ final class AppModel {
 
     private func tryLoadKeysFromKeychain(allowUserInteraction: Bool, announceOutcome: Bool) {
         guard shouldAccessKeychain else { return }
+        let theIntro = keychain.get(.theIntroDBAPIKey, allowUserInteraction: allowUserInteraction)
         let intro = keychain.get(.introDBAPIKey, allowUserInteraction: allowUserInteraction)
         let tmdb = keychain.get(.tmdbAPIKey, allowUserInteraction: allowUserInteraction)
 
         var loadedCount = 0
+        if let theIntro {
+            theIntroDBAPIKey = theIntro
+            loadedCount += 1
+        }
         if let intro {
             introDBAPIKey = intro
             loadedCount += 1
@@ -370,36 +394,144 @@ final class AppModel {
             return
         }
 
-        do {
-            let response = try await introDBClient.fetchMedia(
-                query: query,
-                apiKey: optional(introDBAPIKey)
-            )
+        let theIntroKey = optional(theIntroDBAPIKey)
+        let introKey = optional(introDBAPIKey)
+        let canUseTheIntro = query.tmdbId != nil || query.imdbId != nil
+        let canUseIntroDB = canUseIntroDB(query: query)
 
-            let payload = response.payload
-            tmdbIdText = String(payload.tmdbId)
-            selectedMediaType = payload.type
-            if payload.type == .tv {
-                seasonText = payload.season.map(String.init) ?? seasonText
-                episodeText = payload.episode.map(String.init) ?? episodeText
+        if !canUseTheIntro && !canUseIntroDB {
+            errorMessage = "Provided identifiers are not compatible with available APIs"
+            return
+        }
+
+        var successByService: [SegmentService: (segments: [SegmentType: [SegmentRange]], normalizedTMDBID: Int?, usage: UsageHeaders?)] = [:]
+        var errorsByService: [SegmentService: Error] = [:]
+
+        await withTaskGroup(of: (SegmentService, Result<(segments: [SegmentType: [SegmentRange]], normalizedTMDBID: Int?, usage: UsageHeaders?), Error>).self) { group in
+            if canUseTheIntro {
+                group.addTask {
+                    do {
+                        let response = try await self.theIntroDBClient.fetchMedia(query: query, apiKey: theIntroKey)
+                        let payload = response.payload
+                        return (
+                            .theIntroDB,
+                            .success((
+                                segments: payload.groupedSegments(),
+                                normalizedTMDBID: payload.tmdbId,
+                                usage: response.usage
+                            ))
+                        )
+                    } catch {
+                        return (.theIntroDB, .failure(error))
+                    }
+                }
             }
 
-            serverSegments = payload.groupedSegments()
-            if prefillDrafts {
-                prefillDraftsFromServerSegments()
+            if canUseIntroDB {
+                group.addTask {
+                    do {
+                        guard let imdbId = query.imdbId,
+                              let season = query.season,
+                              let episode = query.episode
+                        else {
+                            throw SegmentValidationError.message("IMDB ID, season, and episode are required for IntroDB fetch")
+                        }
+
+                        let response = try await self.introDBClient.fetchSegments(
+                            imdbId: imdbId,
+                            season: season,
+                            episode: episode,
+                            apiKey: introKey
+                        )
+
+                        return (
+                            .introDB,
+                            .success((
+                                segments: response.payload.groupedSegments(),
+                                normalizedTMDBID: nil,
+                                usage: response.usage
+                            ))
+                        )
+                    } catch {
+                        return (.introDB, .failure(error))
+                    }
+                }
             }
-            usageMessage = response.usage?.shortDescription ?? ""
-            infoMessage = "Loaded segments from TheIntroDB"
-        } catch let apiError as IntroDBClientError {
-            usageMessage = apiError.usage?.shortDescription ?? ""
-            if apiError.statusCode == 404 {
+
+            for await (service, result) in group {
+                switch result {
+                case .success(let payload):
+                    successByService[service] = payload
+                case .failure(let error):
+                    errorsByService[service] = error
+                }
+            }
+        }
+
+        let emptySegments: [SegmentType: [SegmentRange]] = AppModel.makeSegmentDictionary(defaultValue: [])
+        let theIntroSegments = successByService[.theIntroDB]?.segments ?? emptySegments
+        let introSegments = successByService[.introDB]?.segments ?? emptySegments
+        var mergedSegments: [SegmentType: [SegmentRange]] = emptySegments
+
+        for segment in SegmentType.allCases {
+            let primary = theIntroSegments[segment] ?? []
+            let fallback = introSegments[segment] ?? []
+            mergedSegments[segment] = primary.isEmpty ? fallback : primary
+        }
+
+        if successByService.isEmpty {
+            let allErrorsAre404 = !errorsByService.isEmpty && errorsByService.values.allSatisfy {
+                ($0 as? APIClientError)?.statusCode == 404
+            }
+            if allErrorsAre404 {
                 serverSegments = AppModel.makeSegmentDictionary(defaultValue: [])
                 infoMessage = "No data found yet. You can create new segments and submit."
                 return
             }
-            errorMessage = "Fetch failed (\(apiError.statusCode ?? 0)): \(apiError.message)"
-        } catch {
-            errorMessage = "Fetch failed: \(error.localizedDescription)"
+
+            if let firstError = errorsByService[.theIntroDB] ?? errorsByService[.introDB] {
+                if let apiError = firstError as? APIClientError {
+                    usageMessage = apiError.usage?.shortDescription ?? ""
+                    errorMessage = "Fetch failed (\(apiError.statusCode ?? 0)): \(apiError.message)"
+                } else {
+                    errorMessage = "Fetch failed: \(firstError.localizedDescription)"
+                }
+                return
+            }
+
+            serverSegments = AppModel.makeSegmentDictionary(defaultValue: [])
+            errorMessage = "Fetch failed: no compatible API endpoint could be called"
+            return
+        }
+
+        if let normalizedTMDBID = successByService[.theIntroDB]?.normalizedTMDBID {
+            tmdbIdText = String(normalizedTMDBID)
+        }
+        if selectedMediaType == .tv {
+            seasonText = query.season.map(String.init) ?? seasonText
+            episodeText = query.episode.map(String.init) ?? episodeText
+        }
+
+        serverSegments = mergedSegments
+        if prefillDrafts {
+            prefillDraftsFromServerSegments()
+        }
+
+        var usageChunks: [String] = []
+        if let usage = successByService[.theIntroDB]?.usage?.shortDescription, !usage.isEmpty {
+            usageChunks.append("TheIntroDB: \(usage)")
+        }
+        if let usage = successByService[.introDB]?.usage?.shortDescription, !usage.isEmpty {
+            usageChunks.append("IntroDB: \(usage)")
+        }
+        usageMessage = usageChunks.joined(separator: " | ")
+
+        if successByService[.theIntroDB] != nil && successByService[.introDB] != nil {
+            infoMessage = "Loaded segments from TheIntroDB with IntroDB fallback"
+        } else if successByService[.theIntroDB] != nil {
+            infoMessage = "Loaded segments from TheIntroDB"
+        } else {
+            infoMessage = "Loaded segments from IntroDB"
         }
     }
 
@@ -654,6 +786,76 @@ final class AppModel {
         appendDraftRange(segment, startMs: startMs, endMs: endMs)
     }
 
+    func moveNearestSegmentEndToPlayhead() {
+        let before = beginSegmentChangeCapture()
+        defer { endSegmentChangeCapture(before: before) }
+
+        let playheadMs = timeline.currentTimeMs
+        
+        // Collect all boundaries (starts and ends) with their distances
+        var boundaries: [(segment: SegmentType, draftIndex: Int, boundaryMs: Int, isEnd: Bool, distance: Int)] = []
+        
+        for segmentType in SegmentType.allCases {
+            let drafts = self.drafts(for: segmentType)
+            for (index, draft) in drafts.enumerated() {
+                if let startMs = draft.startMs {
+                    let distance = abs(startMs - playheadMs)
+                    boundaries.append((segment: segmentType, draftIndex: index, boundaryMs: startMs, isEnd: false, distance: distance))
+                }
+                if let endMs = draft.endMs {
+                    let distance = abs(endMs - playheadMs)
+                    boundaries.append((segment: segmentType, draftIndex: index, boundaryMs: endMs, isEnd: true, distance: distance))
+                }
+            }
+        }
+        
+        // Find closest boundary
+        guard let closest = boundaries.min(by: { $0.distance < $1.distance }) else {
+            errorMessage = "No segment boundary found"
+            return
+        }
+        
+        // Check if this boundary is connected to another segment
+        // E.g., if this is a draft end, check if another segment starts at the same point
+        var adjacentBoundary: (segment: SegmentType, draftIndex: Int, boundaryMs: Int, isEnd: Bool)? = nil
+        
+        for boundary in boundaries {
+            if boundary.segment != closest.segment || boundary.draftIndex != closest.draftIndex {
+                if closest.isEnd && !boundary.isEnd && boundary.boundaryMs == closest.boundaryMs {
+                    // closest is an end, boundary is a start at same position - they're connected
+                    adjacentBoundary = (segment: boundary.segment, draftIndex: boundary.draftIndex, boundaryMs: boundary.boundaryMs, isEnd: boundary.isEnd)
+                    break
+                } else if !closest.isEnd && boundary.isEnd && boundary.boundaryMs == closest.boundaryMs {
+                    // closest is a start, boundary is an end at same position - they're connected
+                    adjacentBoundary = (segment: boundary.segment, draftIndex: boundary.draftIndex, boundaryMs: boundary.boundaryMs, isEnd: boundary.isEnd)
+                    break
+                }
+            }
+        }
+        
+        // Update the closest boundary directly
+        var closestDrafts = drafts(for: closest.segment)
+        if closest.isEnd {
+            closestDrafts[closest.draftIndex].endMs = min(playheadMs, SegmentValidator.maxTimestampMs)
+        } else {
+            closestDrafts[closest.draftIndex].startMs = max(0, playheadMs)
+        }
+        localDrafts[closest.segment] = normalizeAndSortDraftsByStart(closestDrafts)
+        
+        // If there's an adjacent boundary, update it too to maintain connection
+        if let adjacent = adjacentBoundary {
+            var adjacentDrafts = drafts(for: adjacent.segment)
+            if adjacent.isEnd {
+                adjacentDrafts[adjacent.draftIndex].endMs = min(playheadMs, SegmentValidator.maxTimestampMs)
+            } else {
+                adjacentDrafts[adjacent.draftIndex].startMs = max(0, playheadMs)
+            }
+            localDrafts[adjacent.segment] = normalizeAndSortDraftsByStart(adjacentDrafts)
+        }
+        
+        infoMessage = "Moved nearest segment boundary to playhead"
+    }
+
     func moveDraft(_ sourceSegment: SegmentType, index: Int, to targetSegment: SegmentType, startMs: Int, endMs: Int) {
         let before = beginSegmentChangeCapture()
         defer { endSegmentChangeCapture(before: before) }
@@ -747,6 +949,11 @@ final class AppModel {
         usageMessage = ""
 
         guard let context = makeUploadContext() else { return }
+        let targetServices = uploadTargets(for: segment, context: context)
+        guard !targetServices.isEmpty else {
+            errorMessage = "No compatible API/key for \(segment.displayName). Provide TheIntroDB key with TMDB ID and/or IntroDB key with IMDB+season+episode."
+            return
+        }
         let segmentDrafts = drafts(for: segment)
             .filter { $0.startMs != nil || $0.endMs != nil }
 
@@ -763,23 +970,26 @@ final class AppModel {
         defer { uploadingSegment = nil }
 
         var uploadCount = 0
+        var uploadAttemptCount = 0
         var lastUsage: UsageHeaders?
         var uploadErrors: [String] = []
 
-            await withTaskGroup(of: (Int, Result<UsageHeaders?, Error>).self) { group in
+            await withTaskGroup(of: (Int, SegmentService, Result<UsageHeaders?, Error>).self) { group in
                 for (index, submissionDraft) in allDrafts.enumerated() {
-                    group.addTask {
-                        do {
-                            let request = try SegmentValidator.makeSubmissionRequest(from: submissionDraft)
-                            let response = try await self.introDBClient.submit(request, apiKey: context.apiKey)
-                            return (index, .success(response.usage))
-                        } catch {
-                            return (index, .failure(error))
+                    for service in targetServices {
+                        uploadAttemptCount += 1
+                        group.addTask {
+                            do {
+                                let usage = try await self.uploadSingleDraft(submissionDraft, service: service, context: context)
+                                return (index, service, .success(usage))
+                            } catch {
+                                return (index, service, .failure(error))
+                            }
                         }
                     }
                 }
 
-                for await (completedIndex, result) in group {
+                for await (completedIndex, service, result) in group {
                     switch result {
                     case .success(let usage):
                         uploadCount += 1
@@ -789,17 +999,17 @@ final class AppModel {
                         let sourceDraft = segmentDrafts[completedIndex]
                         rememberDurationTemplate(for: segment, draft: sourceDraft)
                     case .failure(let error):
-                        uploadErrors.append("Draft \(completedIndex + 1): \(error.localizedDescription)")
+                        uploadErrors.append("\(service.rawValue) draft \(completedIndex + 1): \(error.localizedDescription)")
                     }
                 }
             }
 
             if !uploadErrors.isEmpty {
-                submissionMessages[segment] = "Uploaded \(uploadCount)/\(allDrafts.count) with errors"
+                submissionMessages[segment] = "Uploaded \(uploadCount)/\(uploadAttemptCount) requests with errors"
                 errorMessage = uploadErrors.joined(separator: "; ")
             } else {
-                submissionMessages[segment] = "Uploaded \(uploadCount) segment(s)"
-                infoMessage = "Segment \(segment.displayName): \(uploadCount) upload(s) completed"
+                submissionMessages[segment] = "Uploaded \(uploadCount) request(s) to \(serviceListLabel(targetServices))"
+                infoMessage = "Segment \(segment.displayName): \(uploadCount) upload(s) to \(serviceListLabel(targetServices)) completed"
             }
 
         usageMessage = lastUsage?.shortDescription ?? ""
@@ -820,32 +1030,40 @@ final class AppModel {
         defer { isUploadingAll = false }
 
         var totalUploads = 0
+        var totalAttemptedUploads = 0
         var lastUsage: UsageHeaders?
         var globalErrors: [String] = []
 
-            await withTaskGroup(of: (SegmentType, Int, Result<UsageHeaders?, Error>).self) { group in
+            await withTaskGroup(of: (SegmentType, Int, SegmentService, Result<UsageHeaders?, Error>).self) { group in
                 for segmentType in SegmentType.allCases {
                     let segmentDrafts = drafts(for: segmentType)
                         .filter { $0.startMs != nil || $0.endMs != nil }
 
                     guard !segmentDrafts.isEmpty else { continue }
+                    let targetServices = uploadTargets(for: segmentType, context: context)
+                    guard !targetServices.isEmpty else {
+                        globalErrors.append("\(segmentType.displayName): no compatible API/key")
+                        continue
+                    }
 
                     for (draftIndex, draft) in segmentDrafts.enumerated() {
                         let submissionDraft = makeSubmissionDraft(segment: segmentType, draft: draft, context: context)
 
-                        group.addTask {
-                            do {
-                                let request = try SegmentValidator.makeSubmissionRequest(from: submissionDraft)
-                                let response = try await self.introDBClient.submit(request, apiKey: context.apiKey)
-                                return (segmentType, draftIndex, .success(response.usage))
-                            } catch {
-                                return (segmentType, draftIndex, .failure(error))
+                        for service in targetServices {
+                            totalAttemptedUploads += 1
+                            group.addTask {
+                                do {
+                                    let usage = try await self.uploadSingleDraft(submissionDraft, service: service, context: context)
+                                    return (segmentType, draftIndex, service, .success(usage))
+                                } catch {
+                                    return (segmentType, draftIndex, service, .failure(error))
+                                }
                             }
                         }
                     }
                 }
 
-                for await (segmentType, draftIndex, result) in group {
+                for await (segmentType, draftIndex, service, result) in group {
                     switch result {
                     case .success(let usage):
                         totalUploads += 1
@@ -859,16 +1077,16 @@ final class AppModel {
                             rememberDurationTemplate(for: segmentType, draft: sourceDraft)
                         }
                     case .failure(let error):
-                        globalErrors.append("\(segmentType.displayName) #\(draftIndex + 1): \(error.localizedDescription)")
+                        globalErrors.append("\(service.rawValue) \(segmentType.displayName) #\(draftIndex + 1): \(error.localizedDescription)")
                     }
                 }
             }
 
             if !globalErrors.isEmpty {
-                infoMessage = "Uploaded \(totalUploads) segment(s) with errors"
+                infoMessage = "Uploaded \(totalUploads)/\(totalAttemptedUploads) requests with errors"
                 errorMessage = globalErrors.prefix(3).joined(separator: "; ") + (globalErrors.count > 3 ? "..." : "")
             } else if totalUploads > 0 {
-                infoMessage = "Uploaded \(totalUploads) segment(s)"
+                infoMessage = "Uploaded \(totalUploads) request(s)"
             } else {
                 infoMessage = "No segments to upload"
             }
@@ -914,27 +1132,28 @@ final class AppModel {
     }
 
     private struct UploadContext {
-        var apiKey: String
-        var tmdbId: Int
+        var theIntroDBAPIKey: String?
+        var introDBAPIKey: String?
+        var tmdbId: Int?
+        var imdbId: String?
         var season: Int?
         var episode: Int?
     }
 
     private func makeUploadContext() -> UploadContext? {
-        let apiKey = introDBAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !apiKey.isEmpty else {
-            errorMessage = "TheIntroDB API key is required for upload"
-            return nil
-        }
+        let theIntroKey = optional(theIntroDBAPIKey)
+        let introKey = optional(introDBAPIKey)
 
-        guard let tmdbId = Int(tmdbIdText.trimmingCharacters(in: .whitespacesAndNewlines)), tmdbId > 0 else {
-            errorMessage = "Valid TMDB ID is required for upload"
+        guard theIntroKey != nil || introKey != nil else {
+            errorMessage = "At least one API key (TheIntroDB or IntroDB) is required for upload"
             return nil
         }
 
         return UploadContext(
-            apiKey: apiKey,
-            tmdbId: tmdbId,
+            theIntroDBAPIKey: theIntroKey,
+            introDBAPIKey: introKey,
+            tmdbId: intOrNil(tmdbIdText),
+            imdbId: optional(imdbIdText),
             season: intOrNil(seasonText),
             episode: intOrNil(episodeText)
         )
@@ -942,8 +1161,8 @@ final class AppModel {
 
     private func makeSubmissionDraft(segment: SegmentType, draft: SegmentDraft, context: UploadContext) -> SubmissionDraft {
         SubmissionDraft(
-            tmdbId: context.tmdbId,
-            imdbId: optional(imdbIdText),
+            tmdbId: context.tmdbId ?? 0,
+            imdbId: context.imdbId,
             mediaType: selectedMediaType,
             segment: segment,
             season: selectedMediaType == .tv ? context.season : nil,
@@ -951,6 +1170,66 @@ final class AppModel {
             startMs: draft.startMs,
             endMs: draft.endMs
         )
+    }
+
+    private func uploadTargets(for segment: SegmentType, context: UploadContext) -> [SegmentService] {
+        var targets: [SegmentService] = []
+
+        if context.theIntroDBAPIKey != nil,
+           let tmdbId = context.tmdbId,
+           tmdbId > 0
+        {
+            targets.append(.theIntroDB)
+        }
+
+        if context.introDBAPIKey != nil,
+           selectedMediaType == .tv,
+           context.imdbId != nil,
+           context.season != nil,
+           context.episode != nil
+        {
+            switch segment {
+            case .intro, .recap, .credits:
+                targets.append(.introDB)
+            case .preview:
+                break
+            }
+        }
+
+        return targets
+    }
+
+    private func uploadSingleDraft(_ draft: SubmissionDraft, service: SegmentService, context: UploadContext) async throws -> UsageHeaders? {
+        switch service {
+        case .theIntroDB:
+            guard let apiKey = context.theIntroDBAPIKey else {
+                throw SegmentValidationError.message("TheIntroDB API key is missing")
+            }
+            guard draft.tmdbId > 0 else {
+                throw SegmentValidationError.message("Valid TMDB ID is required for TheIntroDB uploads")
+            }
+            let request = try SegmentValidator.makeTheIntroDBSubmissionRequest(from: draft)
+            let response = try await theIntroDBClient.submit(request, apiKey: apiKey)
+            return response.usage
+        case .introDB:
+            guard let apiKey = context.introDBAPIKey else {
+                throw SegmentValidationError.message("IntroDB API key is missing")
+            }
+            let request = try SegmentValidator.makeIntroDBSubmissionRequest(from: draft)
+            let response = try await introDBClient.submit(request, apiKey: apiKey)
+            return response.usage
+        }
+    }
+
+    private func canUseIntroDB(query: MediaQuery) -> Bool {
+        selectedMediaType == .tv
+            && query.imdbId != nil
+            && query.season != nil
+            && query.episode != nil
+    }
+
+    private func serviceListLabel(_ services: [SegmentService]) -> String {
+        services.map(\.rawValue).joined(separator: ", ")
     }
 
     private func invalidateEffectiveDurationCache() {

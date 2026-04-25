@@ -138,6 +138,8 @@ func emitStep(_ step: String) -> String {
     case "clearDraft":
         guard parts.count == 2 else { return "" }
         return "model.clearDraft(.\(parts[1]))"
+    case "moveNearestSegmentEnd":
+        return "model.moveNearestSegmentEndToPlayhead()"
     case "undo":
         return "model.undoSegmentChange()"
     case "redo":
