@@ -89,4 +89,24 @@ final class FilenameMediaParserTests: XCTestCase {
         XCTAssertEqual(parsed.year, 2001)
         XCTAssertEqual(parsed.mediaTypeHint, .movie)
     }
+
+    func testSRTParserParsesFixture() throws {
+        let url = try fixtureURL(named: "My Instant Death Ability Is Overpowered (2024) - s01e06.eng.srt")
+        let content = try String(contentsOf: url, encoding: .utf8)
+        let entries = SRTParser.parse(content)
+
+        XCTAssertFalse(entries.isEmpty)
+        XCTAssertTrue(entries.count > 100)
+        XCTAssertEqual(entries.first?.startMs, 2_040)
+    }
+
+    private func fixtureURL(named fileName: String) throws -> URL {
+        let testsDir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+        let url = testsDir.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw XCTSkip("Missing fixture: \(fileName)")
+        }
+        return url
+    }
 }

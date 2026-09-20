@@ -84,7 +84,18 @@ struct TimelineView: View {
     var minimumZoom: Double
     var serverSegments: [SegmentType: [SegmentRange]]
     var drafts: [SegmentType: [SegmentDraft]]
+    var autoRecapDraftKeys: Set<String> = []
+    var noSegmentFlags: [SegmentType: Bool] = [:]
     var audioTrack: TimelineDensityTrack
+    var isAutoRecapEnabled: Bool = false
+    var hasSubtitleSourceConfigured: Bool = false
+    var onToggleAutoRecap: () -> Void = {}
+    var isSceneDetectionEnabled: Bool = true
+    var onToggleSceneDetection: () -> Void = {}
+    var isMusicLikelihoodEnabled: Bool = true
+    var onToggleMusicLikelihood: () -> Void = {}
+    var isSubmissionLoggingEnabled: Bool = true
+    var onToggleSubmissionLogging: () -> Void = {}
     var onSeek: (Int) -> Void
     var onSegmentDragSelect: (SegmentType, Int, Int) -> Void
     var onDraftStartDrag: (SegmentType, Int, Int) -> Void
@@ -94,6 +105,7 @@ struct TimelineView: View {
     var onDraftHandleDragEnded: () -> Void = {}
     var onMinimumZoomComputed: (Double) -> Void
     var videoLoadID: Int
+    var draftOutlineOnly: Bool = false
 
     private let rowHeight: CGFloat = 28
     private let densityRowHeight: CGFloat = 28
@@ -134,6 +146,52 @@ struct TimelineView: View {
                         TimelineHelpPopover()
                             .padding(12)
                     }
+
+                    Divider()
+                        .frame(height: 14)
+                        .padding(.leading, 12)
+
+                    Button {
+                        onToggleAutoRecap()
+                    } label: {
+                        Image(systemName: isAutoRecapEnabled ? "waveform.badge.magnifyingglass" : "waveform.badge.magnifyingglass")
+                            .font(.subheadline)
+                            .foregroundStyle(isAutoRecapEnabled ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                            .opacity((!hasSubtitleSourceConfigured && !isAutoRecapEnabled) ? 0.4 : 1.0)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isAutoRecapEnabled ? "Auto Recap enabled – click to disable" : "Auto Recap disabled – click to enable")
+                    .disabled(!hasSubtitleSourceConfigured && !isAutoRecapEnabled)
+
+                    Button {
+                        onToggleSceneDetection()
+                    } label: {
+                        Image(systemName: "film.stack")
+                            .font(.subheadline)
+                            .foregroundStyle(isSceneDetectionEnabled ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                    }
+                    .buttonStyle(.plain)
+                    .help(isSceneDetectionEnabled ? "Scene detection enabled – click to disable" : "Scene detection disabled – click to enable")
+
+                    Button {
+                        onToggleMusicLikelihood()
+                    } label: {
+                        Image(systemName: "music.note")
+                            .font(.subheadline)
+                            .foregroundStyle(isMusicLikelihoodEnabled ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                    }
+                    .buttonStyle(.plain)
+                    .help(isMusicLikelihoodEnabled ? "Music likelihood enabled – click to disable" : "Music likelihood disabled – click to enable")
+
+                    Button {
+                        onToggleSubmissionLogging()
+                    } label: {
+                        Image(systemName: "text.append")
+                            .font(.subheadline)
+                            .foregroundStyle(isSubmissionLoggingEnabled ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                    }
+                    .buttonStyle(.plain)
+                    .help(isSubmissionLoggingEnabled ? "Submission log enabled – click to disable" : "Submission log disabled – click to enable")
                 }
                 Spacer()
                 Text("Playhead \(TimeFormatting.display(ms: currentTimeMs))")
@@ -177,6 +235,23 @@ struct TimelineView: View {
                                 .frame(width: width, height: rowHeight)
                                 .offset(y: y)
 
+                            if noSegmentFlags[segmentType] == true {
+                                Canvas { ctx, size in
+                                    let spacing: CGFloat = 8
+                                    var path = Path()
+                                    var x: CGFloat = -size.height
+                                    while x < size.width + size.height {
+                                        path.move(to: CGPoint(x: x, y: 0))
+                                        path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                                        x += spacing
+                                    }
+                                    ctx.stroke(path, with: .color(.gray.opacity(0.38)), lineWidth: 1.0)
+                                }
+                                .frame(width: width, height: rowHeight)
+                                .offset(y: y)
+                                .allowsHitTesting(false)
+                            }
+
                             ForEach(Array((serverSegments[segmentType] ?? []).enumerated()), id: \.offset) { _, range in
                                 segmentBar(
                                     range: range,
@@ -194,7 +269,8 @@ struct TimelineView: View {
                                         segmentType: segmentType,
                                         yOffset: y,
                                         width: width,
-                                        isDraft: true
+                                        isDraft: true,
+                                        draft: draft
                                     )
 
                                     if let startMs = draft.startMs {
@@ -495,22 +571,54 @@ struct TimelineView: View {
         segmentType: SegmentType,
         yOffset: CGFloat,
         width: CGFloat,
-        isDraft: Bool
+        isDraft: Bool,
+        draft: SegmentDraft? = nil
     ) -> some View {
         Group {
             if let bar = barGeometry(for: range, width: width) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(segmentType.color.opacity(isDraft ? 0.85 : 0.45))
+                    .fill(segmentType.color.opacity(isDraft ? (draftOutlineOnly ? 0.0 : 0.85) : 0.45))
                     .overlay {
                         if isDraft {
                             RoundedRectangle(cornerRadius: 4)
-                                .stroke(segmentType.color.opacity(0.95), style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                                .stroke(
+                                    segmentType.color.opacity(0.95),
+                                    style: StrokeStyle(lineWidth: draftOutlineOnly ? 2 : 1, dash: draftOutlineOnly ? [] : [5, 3])
+                                )
+                        }
+
+                        if isDraft,
+                           !draftOutlineOnly,
+                           segmentType == .recap,
+                           let draft,
+                           isAutoRecapDraft(draft) {
+                            GeometryReader { proxy in
+                                let h = proxy.size.height
+                                let w = proxy.size.width
+                                let spacing: CGFloat = 6
+
+                                Path { path in
+                                    var x: CGFloat = -h
+                                    while x < w {
+                                        path.move(to: CGPoint(x: x, y: h))
+                                        path.addLine(to: CGPoint(x: x + h, y: 0))
+                                        x += spacing
+                                    }
+                                }
+                                .stroke(Color.white.opacity(0.55), lineWidth: 0.8)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
                         }
                     }
                     .frame(width: bar.width, height: rowHeight - 8)
                     .offset(x: bar.x, y: yOffset + 4)
             }
         }
+    }
+
+    private func isAutoRecapDraft(_ draft: SegmentDraft) -> Bool {
+        guard let start = draft.startMs, let end = draft.endMs else { return false }
+        return autoRecapDraftKeys.contains("\(start)-\(end)")
     }
 
     @ViewBuilder
@@ -746,6 +854,27 @@ struct TimelineView: View {
 }
 
 private struct TimelineHelpPopover: View {
+    private let draftRows: [(String, String)] = [
+        ("I / ⇧I / ⌥I", "Start / End / No Intro"),
+        ("R / ⇧R / ⌥R", "Start / End / No Recap"),
+        ("C / ⇧C / ⌥C", "Start / End / No Credits"),
+        ("P / ⇧P / ⌥P", "Start / End / No Preview")
+    ]
+
+    private let jumpRows: [(String, String)] = [
+        ("⌘I / ⌘⇧I", "Next Intro Start / End"),
+        ("⌘R / ⌘⇧R", "Next Recap Start / End"),
+        ("⌘C / ⌘⇧C", "Next Credits Start / End"),
+        ("⌘P / ⌘⇧P", "Next Preview Start / End")
+    ]
+
+    private let boundaryRows: [(String, String)] = [
+        ("⇧← / ⇧→", "Jump to previous / next scene transition"),
+        ("⌘← / ⌘→", "Nudge nearest boundary ±1 frame"),
+        ("⌥← / ⌥→", "Nudge nearest boundary ±1 s"),
+        (",", "Move nearest segment boundary to playhead")
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Timeline Help")
@@ -755,16 +884,20 @@ private struct TimelineHelpPopover: View {
 
             Text("Shortcuts")
                 .font(.subheadline.weight(.semibold))
-            Text("I / ⇧I: Intro start/end")
-            Text("R / ⇧R: Recap start/end")
-            Text("C / ⇧C: Credits start/end")
-            Text("P / ⇧P: Preview start/end")
-            Text(",: Move nearest segment boundary to playhead")
+            HStack(alignment: .top, spacing: 10) {
+                TimelineShortcutGroupCard(title: "Draft", rows: draftRows)
+                    .frame(minWidth: 200, idealWidth: 220, maxWidth: 240)
+                TimelineShortcutGroupCard(title: "Jump", rows: jumpRows)
+                    .frame(minWidth: 220, idealWidth: 240, maxWidth: 260)
+                TimelineShortcutGroupCard(title: "Boundary", rows: boundaryRows)
+                    .frame(minWidth: 220, idealWidth: 240, maxWidth: 260)
+            }
 
             Divider()
 
             Text("Interactions")
                 .font(.subheadline.weight(.semibold))
+            Label("⌘⇧N: open next video file", systemImage: "arrow.right.circle")
             Label("Drag on timeline: seek playhead", systemImage: "arrow.left.and.line.vertical.and.arrow.right")
             Label("Click thumbnail in frame strip: seek and enter single-frame mode", systemImage: "photo.on.rectangle")
             Label("⌥ + Drag: create segment in hovered row", systemImage: "arrow.up.left.and.arrow.down.right")
@@ -775,6 +908,74 @@ private struct TimelineHelpPopover: View {
             Label("Vertical trackpad scroll: zoom timeline", systemImage: "arrow.up.and.down")
         }
         .font(.caption)
-        .frame(width: 380, alignment: .leading)
+        .frame(width: 700, alignment: .leading)
     }
+}
+
+private struct TimelineShortcutGroupCard: View {
+    let title: String
+    let rows: [(String, String)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                timelineShortcutLine(row.0, row.1)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 9)
+                .fill(Color.white.opacity(0.18))
+        )
+    }
+}
+
+private struct TimelineShortcutLine: View {
+    let key: String
+    let action: String
+
+    private var keyParts: [String] {
+        key
+            .split(separator: "/")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(spacing: 4) {
+                ForEach(Array(keyParts.enumerated()), id: \.offset) { index, part in
+                    Text(part)
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color.black.opacity(0.12))
+                        )
+
+                    if index < keyParts.count - 1 {
+                        Text("/")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: 110, alignment: .leading)
+
+            Text(action)
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private func timelineShortcutLine(_ key: String, _ action: String) -> some View {
+    TimelineShortcutLine(key: key, action: action)
 }

@@ -4,9 +4,11 @@ import Security
 
 struct KeychainStore {
     enum Key: String {
+        case apiKeysBundle = "api_keys_bundle_v1"
         case theIntroDBAPIKey = "theintrodb_api_key"
         case introDBAPIKey = "introdb_api_key"
         case tmdbAPIKey = "tmdb_api_key"
+        case openSubtitlesAPIKey = "opensubtitles_api_key"
     }
 
     private let service: String

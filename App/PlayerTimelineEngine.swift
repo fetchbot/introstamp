@@ -13,6 +13,7 @@ final class PlayerTimelineEngine {
     var waveformBuckets: [Double] = []
     var musicLikelihoodBuckets: [Double] = []
     var isLoadingWaveform = false
+    var onAnalysisAssetReady: ((URL) -> Void)?
     /// Tracks the URL of the asset currently backing the player item.
     /// For SMB/remote files this switches from the network URL to the local
     /// temp copy once the copy is complete, so observers can rebuild
@@ -29,10 +30,11 @@ final class PlayerTimelineEngine {
     private var pendingSeekTargetMs: Int?
     private var videoLoadTask: Task<Void, Never>?
     private var remoteCopyTask: Task<Bool, Never>?
+    private var remoteCopyStartGateTask: Task<Void, Never>?
     private var remoteCopyTaskID = UUID()
     private var musicLikelihoodTask: Task<Void, Never>?
     private var timeControlStatusObservation: NSKeyValueObservation?
-    private var frameDurationSeconds: Double = 0
+    private(set) var frameDurationSeconds: Double = 0
 
     init() {
         NotificationCenter.default.addObserver(
@@ -82,6 +84,11 @@ final class PlayerTimelineEngine {
             guard !Task.isCancelled else { return }
 
             if isRemoteURL(url) {
+                if let gateTask = self.remoteCopyStartGateTask {
+                    await gateTask.value
+                }
+                guard !Task.isCancelled else { return }
+
                 guard let localURL = await localVideoURL(for: url) else {
                     guard currentLoadID == loadID else { return }
                     isLoadingWaveform = false
@@ -98,18 +105,28 @@ final class PlayerTimelineEngine {
                 currentTempVideoURL = localURL
                 switchPlayerToLocalCopy(localURL)
                 currentVideoAssetURL = localURL
+                onAnalysisAssetReady?(localURL)
                 await loadWaveform(from: localURL)
                 return
             }
 
             guard currentLoadID == loadID else { return }
+            onAnalysisAssetReady?(url)
             await loadWaveform(from: url)
         }
     }
 
+    func setRemoteCopyStartGate(_ gateTask: Task<Void, Never>?) {
+        remoteCopyStartGateTask?.cancel()
+        remoteCopyStartGateTask = gateTask
+    }
+
     func seek(ms: Int) {
-        guard let player else { return }
         let bounded = max(0, min(ms, durationMs > 0 ? durationMs : ms))
+        guard let player else {
+            currentTimeMs = bounded
+            return
+        }
         let target = CMTime(value: CMTimeValue(bounded), timescale: 1000)
 
         seekSequence &+= 1
@@ -141,7 +158,7 @@ final class PlayerTimelineEngine {
                 let observedTimeMs = self.displayTimeMs(for: player, observedSeconds: time.seconds)
 
                 if let pendingSeekTargetMs = self.pendingSeekTargetMs {
-                    let isNearPendingTarget = abs(observedTimeMs - pendingSeekTargetMs) <= 33
+                    let isNearPendingTarget = abs(observedTimeMs - pendingSeekTargetMs) <= self.pendingSeekToleranceMs
                     if !isNearPendingTarget {
                         return
                     }
@@ -184,7 +201,8 @@ final class PlayerTimelineEngine {
         return snappedFrameTimeMs(for: observedSeconds)
     }
 
-    private func isRemoteURL(_ url: URL) -> Bool {
+    func isRemoteURL(_ url: URL?) -> Bool {
+        guard let url else { return false }
         guard url.isFileURL else { return true }
         if let values = try? url.resourceValues(forKeys: [.volumeIsLocalKey]),
            let isLocal = values.volumeIsLocal {
@@ -196,6 +214,7 @@ final class PlayerTimelineEngine {
     private func localVideoURL(for url: URL) async -> URL? {
         guard isRemoteURL(url) else { return url }
 
+
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("IntroStamp", isDirectory: true)
         let fileName = "\(UUID().uuidString)-\(url.lastPathComponent)"
@@ -204,7 +223,9 @@ final class PlayerTimelineEngine {
         remoteCopyTask?.cancel()
         let copyTaskID = UUID()
         remoteCopyTaskID = copyTaskID
-        let copyTask = Task.detached(priority: .userInitiated) {
+        // Keep remote video copy below user-visible subtitle prefetch so
+        // recap subtitle IO can complete sooner on constrained network mounts.
+        let copyTask = Task.detached(priority: .background) {
             do {
                 try Task.checkCancellation()
                 try Self.copyFileCancellable(from: url, to: destURL, in: tempDir)
@@ -286,6 +307,12 @@ final class PlayerTimelineEngine {
         let bounded = max(0, ms)
         guard durationMs > 0 else { return bounded }
         return min(bounded, durationMs)
+    }
+
+    private var pendingSeekToleranceMs: Int {
+        // Use roughly half a frame so the settle gate does not absorb adjacent frames.
+        guard frameDurationSeconds > 0 else { return 33 }
+        return max(1, Int((frameDurationSeconds * 1000 * 0.5).rounded()))
     }
 
     private func snappedFrameTimeMs(for seconds: Double) -> Int {
@@ -409,6 +436,12 @@ final class PlayerTimelineEngine {
             waveformBuckets = []
             musicLikelihoodBuckets = []
         }
+    }
+
+    func clearMusicLikelihood() {
+        musicLikelihoodTask?.cancel()
+        musicLikelihoodTask = nil
+        musicLikelihoodBuckets = []
     }
 
     func reloadMusicLikelihood() async {

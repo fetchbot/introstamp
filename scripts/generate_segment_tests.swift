@@ -61,14 +61,6 @@ func swiftOptionalInt(_ raw: String) -> String {
     return trimmed
 }
 
-func swiftMediaType(_ raw: String) -> String {
-    raw.trimmingCharacters(in: .whitespacesAndNewlines) == "tv" ? ".tv" : ".movie"
-}
-
-func swiftSegmentType(_ raw: String) -> String {
-    "." + raw.trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
 func parseDraftSpec(_ spec: String) -> [String: [(String, String)]] {
     // intro=10000-20000|40000-50000;preview=3000-4000
     let trimmed = spec.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,9 +112,37 @@ func emitStep(_ step: String) -> String {
     let parts = step.split(separator: ":").map(String.init)
     guard let op = parts.first else { return "" }
     switch op {
+    case "setTMDBID":
+        guard parts.count == 2 else { return "" }
+        return "model.tmdbIdText = \"\(parts[1])\""
+    case "setMediaType":
+        guard parts.count == 2 else { return "" }
+        return "model.selectedMediaType = .\(parts[1])"
+    case "setTMDBGenres":
+        guard parts.count == 2 else { return "" }
+        let genres = parts[1]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
+        return "model.tmdbGenreNames = [\(genres)]"
     case "setPlayhead":
         guard parts.count == 2 else { return "" }
         return "model.timeline.currentTimeMs = \(parts[1])"
+    case "setDetectedScenes":
+        guard parts.count == 2 else { return "" }
+        let timestamps = parts[1]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let scenes = timestamps.enumerated().map { index, value in
+            "SceneChange(index: \(index + 1), timestampMs: \(value), endTimestampMs: nil, score: 1.0, type: .hardCut)"
+        }.joined(separator: ", ")
+        return "model.detectedScenes = [\(scenes)]"
+    case "setTemplateDuration":
+        guard parts.count == 3 else { return "" }
+        return "model.setTemplateDurationMs(\(parts[2]), for: .\(parts[1]))"
     case "setDraftStart":
         guard parts.count == 2 else { return "" }
         return "model.setDraftStart(.\(parts[1]))"
@@ -140,10 +160,43 @@ func emitStep(_ step: String) -> String {
         return "model.clearDraft(.\(parts[1]))"
     case "moveNearestSegmentEnd":
         return "model.moveNearestSegmentEndToPlayhead()"
+    case "jumpToNextStart":
+        guard parts.count == 2 else { return "" }
+        return "model.jumpToNextStart(.\(parts[1]))"
+    case "jumpToNextEnd":
+        guard parts.count == 2 else { return "" }
+        return "model.jumpToNextEnd(.\(parts[1]))"
+    case "jumpToNextScene":
+        return "model.jumpToNextScene()"
+    case "jumpToPreviousScene":
+        return "model.jumpToPreviousScene()"
+    case "nudgeBoundary":
+        guard parts.count == 2 else { return "" }
+        return "model.nudgeNearestBoundary(by: \(parts[1]))"
     case "undo":
         return "model.undoSegmentChange()"
     case "redo":
         return "model.redoSegmentChange()"
+    case "setAutoRecapKeys":
+        guard parts.count == 2 else { return "" }
+        let keys = parts[1]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
+        return "model.autoRecapDraftKeys = [\(keys)]"
+    case "setAutoRecapDrafts":
+        guard parts.count == 2 else { return "" }
+        let ranges = parts[1]
+            .split(separator: "|")
+            .map(String.init)
+        let tuples = ranges.compactMap { range -> String? in
+            let bounds = range.split(separator: "-", maxSplits: 1).map(String.init)
+            guard bounds.count == 2 else { return nil }
+            return "(startMs: \(bounds[0]), endMs: \(bounds[1]))"
+        }.joined(separator: ", ")
+        return "model.localDrafts[.recap] = model.autoRecapDrafts(from: [\(tuples)])"
     default:
         return ""
     }
@@ -153,6 +206,21 @@ func sanitizeTestName(_ raw: String) -> String {
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
     let cleaned = raw.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
     return String(cleaned)
+}
+
+func scenePresetExpression(from rawValue: String) -> String {
+    switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case "anime":
+        return ".anime"
+    case "liveaction":
+        return ".liveAction"
+    case "dark-liveaction":
+        return ".darkLiveAction"
+    case "sports":
+        return ".sports"
+    default:
+        return ".standard"
+    }
 }
 
 func generate(rows: [Row]) -> String {
@@ -165,40 +233,6 @@ func generate(rows: [Row]) -> String {
 
     for row in rows {
         let testName = sanitizeTestName(row["test_name"])
-        let kind = row["kind"].trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if kind == "validator" {
-            out.append("    func \(testName)() throws {")
-            out.append("        let draft = SubmissionDraft(")
-            out.append("            tmdbId: 123,")
-            out.append("            imdbId: nil,")
-            out.append("            mediaType: \(swiftMediaType(row["media_type"])),")
-            out.append("            segment: \(swiftSegmentType(row["segment"])),")
-            out.append("            season: \(swiftOptionalInt(row["season"])),")
-            out.append("            episode: \(swiftOptionalInt(row["episode"])),")
-            out.append("            startMs: \(swiftOptionalInt(row["start_ms"])),")
-            out.append("            endMs: \(swiftOptionalInt(row["end_ms"]))")
-            out.append("        )")
-            if row["should_throw"].trimmingCharacters(in: .whitespacesAndNewlines) == "true" {
-                out.append("        XCTAssertThrowsError(try SegmentValidator.makeSubmissionRequest(from: draft))")
-            } else {
-                out.append("        let request = try SegmentValidator.makeSubmissionRequest(from: draft)")
-                let assertions = parseAssertions(row["assertions"])
-                if let value = assertions["request_start"]?.first {
-                    out.append("        XCTAssertEqual(request.startMs, \(swiftOptionalInt(value)))")
-                }
-                if let value = assertions["request_end"]?.first {
-                    if value == "nil" {
-                        out.append("        XCTAssertNil(request.endMs)")
-                    } else {
-                        out.append("        XCTAssertEqual(request.endMs, \(value))")
-                    }
-                }
-            }
-            out.append("    }")
-            out.append("")
-            continue
-        }
 
         out.append("    @MainActor")
         out.append("    func \(testName)() {")
@@ -261,6 +295,49 @@ func generate(rows: [Row]) -> String {
         }
         if let values = assertions["can_redo"], let first = values.first {
             out.append("        XCTAssertEqual(model.canRedoSegmentChange, \(first))")
+        }
+        if let values = assertions["playhead"], let first = values.first {
+            out.append("        XCTAssertEqual(model.timeline.currentTimeMs, \(first))")
+        }
+
+        if let values = assertions["scene_preset"], let first = values.first {
+            out.append("        XCTAssertEqual(SceneDetector.Config.inferredPreset(from: model.tmdbGenreNames, mediaType: model.selectedMediaType), \(scenePresetExpression(from: first)))")
+        }
+
+        if let values = assertions["scene_count"], let first = values.first {
+            out.append("        XCTAssertEqual(model.detectedScenes.count, \(first))")
+        }
+
+        if let containsEntries = assertions["uploadable_contains"] {
+            for entry in containsEntries {
+                for chunk in entry.split(separator: "|").map(String.init) {
+                    let pair = chunk.split(separator: ":", maxSplits: 1).map(String.init)
+                    guard pair.count == 2 else { continue }
+                    let bounds = pair[1].split(separator: "-", maxSplits: 1).map(String.init)
+                    guard bounds.count == 2 else { continue }
+                    out.append("        assertDraftExists(in: model.uploadableDrafts(for: .\(pair[0])), start: \(swiftOptionalInt(bounds[0])), end: \(swiftOptionalInt(bounds[1])))")
+                }
+            }
+        }
+
+        if let notContainsEntries = assertions["uploadable_not_contains"] {
+            for entry in notContainsEntries {
+                for chunk in entry.split(separator: "|").map(String.init) {
+                    let pair = chunk.split(separator: ":", maxSplits: 1).map(String.init)
+                    guard pair.count == 2 else { continue }
+                    let bounds = pair[1].split(separator: "-", maxSplits: 1).map(String.init)
+                    guard bounds.count == 2 else { continue }
+                    out.append("        XCTAssertFalse(model.uploadableDrafts(for: .\(pair[0])).contains(where: { $0.startMs == \(swiftOptionalInt(bounds[0])) && $0.endMs == \(swiftOptionalInt(bounds[1])) }))")
+                }
+            }
+        }
+
+        if let countEntries = assertions["uploadable_count"] {
+            for entry in countEntries {
+                let pair = entry.split(separator: ":", maxSplits: 1).map(String.init)
+                guard pair.count == 2 else { continue }
+                out.append("        XCTAssertEqual(model.uploadableDrafts(for: .\(pair[0])).count, \(pair[1]))")
+            }
         }
 
         out.append("    }")

@@ -32,7 +32,7 @@ final class IntroDBClientTests: XCTestCase {
             return (response, data)
         }
 
-        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
+        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v3")!, session: makeSession())
 
         let response = try await client.fetchMedia(
             query: MediaQuery(tmdbId: 95479, imdbId: nil, season: 1, episode: 10),
@@ -63,7 +63,7 @@ final class IntroDBClientTests: XCTestCase {
             return (response, data)
         }
 
-        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v2")!, session: makeSession())
+        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v3")!, session: makeSession())
 
         let request = TheIntroDBSubmissionRequest(
             tmdbId: 123,
@@ -85,6 +85,41 @@ final class IntroDBClientTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
+    }
+
+    func testSubmitDecodesV3SubmissionsResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer key-123")
+            XCTAssertTrue(request.url?.path.hasSuffix("/submit") == true)
+
+            if let body = request.httpBody,
+               let jsonObject = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                XCTAssertEqual(jsonObject["video_duration_ms"] as? Int, 3_600_000)
+            }
+
+            let json = #"{"submissions":[{"id":"550e8400-e29b-41d4-a716-446655440000","tmdbId":123,"type":"movie","segment":"intro","videoDurationMs":3600000,"startMs":0,"endMs":30000,"status":"pending","weight":1}]}"#
+            let data = Data(json.utf8)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let client = TheIntroDBClient(baseURL: URL(string: "https://example.com/v3")!, session: makeSession())
+
+        let request = TheIntroDBSubmissionRequest(
+            tmdbId: 123,
+            type: .movie,
+            segment: .intro,
+            startMs: 0,
+            endMs: 30_000,
+            videoDurationMs: 3_600_000
+        )
+
+        let response = try await client.submit(request, apiKey: "key-123")
+        XCTAssertEqual(response.payload.submissions.count, 1)
+        XCTAssertEqual(response.payload.submission?.tmdbId, 123)
+        XCTAssertEqual(response.payload.submission?.videoDurationMs, 3_600_000)
+        XCTAssertTrue(response.payload.ok)
     }
 
     func testIntroDBV1FetchDecodesSegments() async throws {
@@ -139,6 +174,70 @@ final class IntroDBClientTests: XCTestCase {
         let response = try await client.submit(request, apiKey: "idb_submit")
         XCTAssertTrue(response.payload.ok)
         XCTAssertEqual(response.payload.submission.status, .pending)
+    }
+
+    @MainActor
+    func testDelayedIntroDBUploadDoesNotMutateNewVideoState() async throws {
+        let lock = NSLock()
+        var requestCount = 0
+
+        MockURLProtocol.requestHandler = { request in
+            lock.lock()
+            defer { lock.unlock() }
+            requestCount += 1
+
+            if request.url?.path == "/segments" {
+                let json = #"{"imdb_id":"tt0944947","season":1,"episode":1,"intro":{"start_ms":1000,"end_ms":2000},"recap":null,"outro":null}"#
+                let data = Data(json.utf8)
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "X-RateLimit-Remaining": "1",
+                        "X-RateLimit-Reset": "1"
+                    ]
+                )!
+                return (response, data)
+            }
+
+            XCTAssertEqual(request.url?.path, "/submit")
+            XCTAssertEqual(request.httpMethod, "POST")
+            let data = Data(#"{"ok":true,"submission":{"id":"550e8400-e29b-41d4-a716-446655440123","status":"pending","weight":1}}"#.utf8)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let introDB = IntroDBClient(baseURL: URL(string: "https://example.com")!, session: makeSession())
+
+        // Prime the client so the next submit is delayed by rate-limit wait logic.
+        _ = try await introDB.fetchSegments(imdbId: "tt0944947", season: 1, episode: 1, apiKey: "idb_test")
+
+        let model = AppModel(introDBClient: introDB)
+        model.selectedMediaType = .tv
+        model.introDBAPIKey = "idb_test"
+        model.imdbIdText = "tt0944947"
+        model.seasonText = "1"
+        model.episodeText = "1"
+        model.localDrafts[.intro] = [SegmentDraft(startMs: 5_000, endMs: 15_000)]
+
+        let delayedUploadTask = Task { await model.uploadSegment(.intro) }
+
+        // Give the upload task time to enter the rate-limit wait.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let nextVideoURL = URL(fileURLWithPath: "/tmp/IntroStamp-next-video.mp4")
+        model.loadVideo(url: nextVideoURL)
+
+        // New video can be edited immediately while old upload is still pending.
+        model.localDrafts[.intro] = [SegmentDraft(startMs: 22_000, endMs: 33_000)]
+        XCTAssertFalse(model.isUploadingSegment(.intro))
+
+        await delayedUploadTask.value
+
+        // Old upload must not clear or overwrite new video drafts/state.
+        XCTAssertEqual(model.localDrafts[.intro], [SegmentDraft(startMs: 22_000, endMs: 33_000)])
+        XCTAssertEqual(model.submissionMessages[.intro], "")
     }
 
     private func makeSession() -> URLSession {

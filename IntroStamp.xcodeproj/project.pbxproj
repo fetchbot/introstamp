@@ -7,23 +7,32 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4C36CF542F8ACD87003409D3 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF412F8AC818003409D3 /* AppModel.swift */; };
-		4C36CF552F8ACD99003409D3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF432F8AC818003409D3 /* ContentView.swift */; };
-		4C36CF562F8ACD99003409D3 /* FilenameMediaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */; };
-		4C36CF572F8ACD99003409D3 /* TheIntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */; };
-		4C36CF582F8ACD99003409D3 /* IntroStampApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF472F8AC818003409D3 /* IntroStampApp.swift */; };
-		4C36CF592F8ACD99003409D3 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF482F8AC818003409D3 /* KeychainStore.swift */; };
-		4C36CF5A2F8ACD99003409D3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF492F8AC818003409D3 /* Models.swift */; };
-		4C36CF5B2F8ACD99003409D3 /* PlayerTimelineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4A2F8AC818003409D3 /* PlayerTimelineEngine.swift */; };
-		4C36CF5C2F8ACD99003409D3 /* SegmentValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4B2F8AC818003409D3 /* SegmentValidator.swift */; };
-		4C36CF5D2F8ACD99003409D3 /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4C2F8AC818003409D3 /* TimeFormatting.swift */; };
-		4C36CF5E2F8ACD99003409D3 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4D2F8AC818003409D3 /* TimelineView.swift */; };
-		4C36CF5F2F8ACD99003409D3 /* TMDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF4E2F8AC818003409D3 /* TMDBClient.swift */; };
+		4C4419512FA621E600420C63 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194F2FA621E600420C63 /* TimelineView.swift */; };
+		4C4419522FA621E600420C63 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419412FA621E600420C63 /* ContentView.swift */; };
+		4C4419532FA621E600420C63 /* RecapDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419492FA621E600420C63 /* RecapDetector.swift */; };
+		4C4419542FA621E600420C63 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419452FA621E600420C63 /* KeychainStore.swift */; };
+		4C4419552FA621E600420C63 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419402FA621E600420C63 /* AppModel.swift */; };
+		4C4419562FA621E600420C63 /* IntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419432FA621E600420C63 /* IntroDBClient.swift */; };
+		4C4419572FA621E600420C63 /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194E2FA621E600420C63 /* TimeFormatting.swift */; };
+		4C4419582FA621E600420C63 /* FilenameMediaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419422FA621E600420C63 /* FilenameMediaParser.swift */; };
+		4C4419592FA621E600420C63 /* IntroStampApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419442FA621E600420C63 /* IntroStampApp.swift */; };
+		4C44195A2FA621E600420C63 /* TMDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419502FA621E600420C63 /* TMDBClient.swift */; };
+		4C44195B2FA621E600420C63 /* OpenSubtitlesClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419472FA621E600420C63 /* OpenSubtitlesClient.swift */; };
+		4C44195C2FA621E600420C63 /* SRTParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194B2FA621E600420C63 /* SRTParser.swift */; };
+		4C44195D2FA621E600420C63 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419462FA621E600420C63 /* Models.swift */; };
+		4C44195E2FA621E600420C63 /* SubtitleDiskCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194C2FA621E600420C63 /* SubtitleDiskCache.swift */; };
+		4C44195F2FA621E600420C63 /* SegmentValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194A2FA621E600420C63 /* SegmentValidator.swift */; };
+		4C4419602FA621E600420C63 /* PlayerTimelineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419482FA621E600420C63 /* PlayerTimelineEngine.swift */; };
+		4C4419612FA621E600420C63 /* TheIntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44194D2FA621E600420C63 /* TheIntroDBClient.swift */; };
+		4C4419662FA6228600420C63 /* GeneratedSegmentScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419632FA6228600420C63 /* GeneratedSegmentScenarioTests.swift */; };
+		4C4419672FA6228600420C63 /* FilenameMediaParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419622FA6228600420C63 /* FilenameMediaParserTests.swift */; };
+		4C4419682FA6228600420C63 /* RecapDetectionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419652FA6228600420C63 /* RecapDetectionIntegrationTests.swift */; };
+		4C4419692FA6228600420C63 /* IntroDBClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4419642FA6228600420C63 /* IntroDBClientTests.swift */; };
+		4C44196A2FA6228600420C63 /* ASSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44196B2FA6228600420C63 /* ASSParser.swift */; };
+		4C44196C2FA6228600420C63 /* SegmentValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C44196D2FA6228600420C63 /* SegmentValidatorTests.swift */; };
 		4C8129932F92E0D800F9740B /* IntroStamp.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4C8129922F92E0D800F9740B /* IntroStamp.icon */; };
-		4CDCE2E12F93966500525FCB /* GeneratedSegmentScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDCE2E02F93966500525FCB /* GeneratedSegmentScenarioTests.swift */; };
-		A1B2C3D42F9A100100000001 /* IntroDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D52F9A100100000001 /* IntroDBClient.swift */; };
-		A8C71D1D1A0D4B5C9E001001 /* FilenameMediaParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF502F8AC818003409D3 /* FilenameMediaParserTests.swift */; };
-		A8C71D1D1A0D4B5C9E001002 /* IntroDBClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C36CF512F8AC818003409D3 /* IntroDBClientTests.swift */; };
+		4C9D13A12FAE61B2005507CF /* SceneDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D13A02FAE61B2005507CF /* SceneDetection.swift */; };
+		4CF700B42FFAA1D1009A6501 /* AppModelReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF700B32FFAA1D1009A6501 /* AppModelReviewTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,44 +46,59 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		4C36CF412F8AC818003409D3 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
-		4C36CF432F8AC818003409D3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameMediaParser.swift; sourceTree = "<group>"; };
-		4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheIntroDBClient.swift; sourceTree = "<group>"; };
-		4C36CF472F8AC818003409D3 /* IntroStampApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroStampApp.swift; sourceTree = "<group>"; };
-		4C36CF482F8AC818003409D3 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		4C36CF492F8AC818003409D3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		4C36CF4A2F8AC818003409D3 /* PlayerTimelineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTimelineEngine.swift; sourceTree = "<group>"; };
-		4C36CF4B2F8AC818003409D3 /* SegmentValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentValidator.swift; sourceTree = "<group>"; };
-		4C36CF4C2F8AC818003409D3 /* TimeFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormatting.swift; sourceTree = "<group>"; };
-		4C36CF4D2F8AC818003409D3 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
-		4C36CF4E2F8AC818003409D3 /* TMDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMDBClient.swift; sourceTree = "<group>"; };
-		4C36CF502F8AC818003409D3 /* FilenameMediaParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameMediaParserTests.swift; sourceTree = "<group>"; };
-		4C36CF512F8AC818003409D3 /* IntroDBClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClientTests.swift; sourceTree = "<group>"; };
+		4C4419402FA621E600420C63 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		4C4419412FA621E600420C63 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4C4419422FA621E600420C63 /* FilenameMediaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameMediaParser.swift; sourceTree = "<group>"; };
+		4C4419432FA621E600420C63 /* IntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClient.swift; sourceTree = "<group>"; };
+		4C4419442FA621E600420C63 /* IntroStampApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroStampApp.swift; sourceTree = "<group>"; };
+		4C4419452FA621E600420C63 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		4C4419462FA621E600420C63 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		4C4419472FA621E600420C63 /* OpenSubtitlesClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenSubtitlesClient.swift; sourceTree = "<group>"; };
+		4C4419482FA621E600420C63 /* PlayerTimelineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTimelineEngine.swift; sourceTree = "<group>"; };
+		4C4419492FA621E600420C63 /* RecapDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecapDetector.swift; sourceTree = "<group>"; };
+		4C44194A2FA621E600420C63 /* SegmentValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentValidator.swift; sourceTree = "<group>"; };
+		4C44194B2FA621E600420C63 /* SRTParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRTParser.swift; sourceTree = "<group>"; };
+		4C44194C2FA621E600420C63 /* SubtitleDiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleDiskCache.swift; sourceTree = "<group>"; };
+		4C44194D2FA621E600420C63 /* TheIntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheIntroDBClient.swift; sourceTree = "<group>"; };
+		4C44194E2FA621E600420C63 /* TimeFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormatting.swift; sourceTree = "<group>"; };
+		4C44194F2FA621E600420C63 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
+		4C4419502FA621E600420C63 /* TMDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMDBClient.swift; sourceTree = "<group>"; };
+		4C4419622FA6228600420C63 /* FilenameMediaParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilenameMediaParserTests.swift; sourceTree = "<group>"; };
+		4C4419632FA6228600420C63 /* GeneratedSegmentScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedSegmentScenarioTests.swift; sourceTree = "<group>"; };
+		4C4419642FA6228600420C63 /* IntroDBClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClientTests.swift; sourceTree = "<group>"; };
+		4C4419652FA6228600420C63 /* RecapDetectionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecapDetectionIntegrationTests.swift; sourceTree = "<group>"; };
+		4C44196B2FA6228600420C63 /* ASSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASSParser.swift; sourceTree = "<group>"; };
+		4C44196D2FA6228600420C63 /* SegmentValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentValidatorTests.swift; sourceTree = "<group>"; };
 		4C8129922F92E0D800F9740B /* IntroStamp.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = IntroStamp.icon; sourceTree = "<group>"; };
-		4CDCE2E02F93966500525FCB /* GeneratedSegmentScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedSegmentScenarioTests.swift; sourceTree = "<group>"; };
+		4C9D13A02FAE61B2005507CF /* SceneDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDetection.swift; sourceTree = "<group>"; };
+		4CF700B32FFAA1D1009A6501 /* AppModelReviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelReviewTests.swift; sourceTree = "<group>"; };
 		4E32CF7DA87E2CFE15B2460C /* IntroStampTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntroStampTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		98935A23629A6C126BE2AD4C /* IntroStamp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IntroStamp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A1B2C3D52F9A100100000001 /* IntroDBClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroDBClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		4C36CF4F2F8AC818003409D3 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				4C36CF412F8AC818003409D3 /* AppModel.swift */,
-				4C36CF432F8AC818003409D3 /* ContentView.swift */,
-				4C36CF442F8AC818003409D3 /* FilenameMediaParser.swift */,
-				4C36CF462F8AC818003409D3 /* TheIntroDBClient.swift */,
-				A1B2C3D52F9A100100000001 /* IntroDBClient.swift */,
-				4C36CF472F8AC818003409D3 /* IntroStampApp.swift */,
-				4C36CF482F8AC818003409D3 /* KeychainStore.swift */,
-				4C36CF492F8AC818003409D3 /* Models.swift */,
-				4C36CF4A2F8AC818003409D3 /* PlayerTimelineEngine.swift */,
-				4C36CF4B2F8AC818003409D3 /* SegmentValidator.swift */,
-				4C36CF4C2F8AC818003409D3 /* TimeFormatting.swift */,
-				4C36CF4D2F8AC818003409D3 /* TimelineView.swift */,
-				4C36CF4E2F8AC818003409D3 /* TMDBClient.swift */,
+				4C4419402FA621E600420C63 /* AppModel.swift */,
+				4C44196B2FA6228600420C63 /* ASSParser.swift */,
+				4C4419412FA621E600420C63 /* ContentView.swift */,
+				4C4419422FA621E600420C63 /* FilenameMediaParser.swift */,
+				4C4419432FA621E600420C63 /* IntroDBClient.swift */,
+				4C4419442FA621E600420C63 /* IntroStampApp.swift */,
+				4C4419452FA621E600420C63 /* KeychainStore.swift */,
+				4C4419462FA621E600420C63 /* Models.swift */,
+				4C4419472FA621E600420C63 /* OpenSubtitlesClient.swift */,
+				4C4419482FA621E600420C63 /* PlayerTimelineEngine.swift */,
+				4C4419492FA621E600420C63 /* RecapDetector.swift */,
+				4C44194A2FA621E600420C63 /* SegmentValidator.swift */,
+				4C44194B2FA621E600420C63 /* SRTParser.swift */,
+				4C44194C2FA621E600420C63 /* SubtitleDiskCache.swift */,
+				4C44194D2FA621E600420C63 /* TheIntroDBClient.swift */,
+				4C44194E2FA621E600420C63 /* TimeFormatting.swift */,
+				4C44194F2FA621E600420C63 /* TimelineView.swift */,
+				4C4419502FA621E600420C63 /* TMDBClient.swift */,
+				4C9D13A02FAE61B2005507CF /* SceneDetection.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -82,9 +106,12 @@
 		4C36CF532F8AC818003409D3 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
-				4CDCE2E02F93966500525FCB /* GeneratedSegmentScenarioTests.swift */,
-				4C36CF502F8AC818003409D3 /* FilenameMediaParserTests.swift */,
-				4C36CF512F8AC818003409D3 /* IntroDBClientTests.swift */,
+				4CF700B32FFAA1D1009A6501 /* AppModelReviewTests.swift */,
+				4C4419622FA6228600420C63 /* FilenameMediaParserTests.swift */,
+				4C4419632FA6228600420C63 /* GeneratedSegmentScenarioTests.swift */,
+				4C4419642FA6228600420C63 /* IntroDBClientTests.swift */,
+				4C4419652FA6228600420C63 /* RecapDetectionIntegrationTests.swift */,
+				4C44196D2FA6228600420C63 /* SegmentValidatorTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -155,6 +182,14 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					7E7DB562C3A25E76391CC2E9 = {
+						LastSwiftMigration = 2630;
+					};
+					BD2916726CD00C41FB32D031 = {
+						LastSwiftMigration = 2630;
+					};
+				};
 			};
 			buildConfigurationList = E77F3B6AD6A68840685C7917 /* Build configuration list for PBXProject "IntroStamp" */;
 			developmentRegion = en;
@@ -192,19 +227,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4C36CF552F8ACD99003409D3 /* ContentView.swift in Sources */,
-				4C36CF562F8ACD99003409D3 /* FilenameMediaParser.swift in Sources */,
-				4C36CF572F8ACD99003409D3 /* TheIntroDBClient.swift in Sources */,
-				A1B2C3D42F9A100100000001 /* IntroDBClient.swift in Sources */,
-				4C36CF582F8ACD99003409D3 /* IntroStampApp.swift in Sources */,
-				4C36CF592F8ACD99003409D3 /* KeychainStore.swift in Sources */,
-				4C36CF5A2F8ACD99003409D3 /* Models.swift in Sources */,
-				4C36CF5B2F8ACD99003409D3 /* PlayerTimelineEngine.swift in Sources */,
-				4C36CF5C2F8ACD99003409D3 /* SegmentValidator.swift in Sources */,
-				4C36CF5D2F8ACD99003409D3 /* TimeFormatting.swift in Sources */,
-				4C36CF5E2F8ACD99003409D3 /* TimelineView.swift in Sources */,
-				4C36CF5F2F8ACD99003409D3 /* TMDBClient.swift in Sources */,
-				4C36CF542F8ACD87003409D3 /* AppModel.swift in Sources */,
+				4C4419512FA621E600420C63 /* TimelineView.swift in Sources */,
+				4C4419522FA621E600420C63 /* ContentView.swift in Sources */,
+				4C4419532FA621E600420C63 /* RecapDetector.swift in Sources */,
+				4C4419542FA621E600420C63 /* KeychainStore.swift in Sources */,
+				4C4419552FA621E600420C63 /* AppModel.swift in Sources */,
+				4C44196A2FA6228600420C63 /* ASSParser.swift in Sources */,
+				4C4419562FA621E600420C63 /* IntroDBClient.swift in Sources */,
+				4C4419572FA621E600420C63 /* TimeFormatting.swift in Sources */,
+				4C4419582FA621E600420C63 /* FilenameMediaParser.swift in Sources */,
+				4C4419592FA621E600420C63 /* IntroStampApp.swift in Sources */,
+				4C44195A2FA621E600420C63 /* TMDBClient.swift in Sources */,
+				4C44195B2FA621E600420C63 /* OpenSubtitlesClient.swift in Sources */,
+				4C9D13A12FAE61B2005507CF /* SceneDetection.swift in Sources */,
+				4C44195C2FA621E600420C63 /* SRTParser.swift in Sources */,
+				4C44195D2FA621E600420C63 /* Models.swift in Sources */,
+				4C44195E2FA621E600420C63 /* SubtitleDiskCache.swift in Sources */,
+				4C44195F2FA621E600420C63 /* SegmentValidator.swift in Sources */,
+				4C4419602FA621E600420C63 /* PlayerTimelineEngine.swift in Sources */,
+				4C4419612FA621E600420C63 /* TheIntroDBClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -212,9 +253,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A8C71D1D1A0D4B5C9E001001 /* FilenameMediaParserTests.swift in Sources */,
-				A8C71D1D1A0D4B5C9E001002 /* IntroDBClientTests.swift in Sources */,
-				4CDCE2E12F93966500525FCB /* GeneratedSegmentScenarioTests.swift in Sources */,
+				4CF700B42FFAA1D1009A6501 /* AppModelReviewTests.swift in Sources */,
+				4C4419662FA6228600420C63 /* GeneratedSegmentScenarioTests.swift in Sources */,
+				4C4419672FA6228600420C63 /* FilenameMediaParserTests.swift in Sources */,
+				4C4419682FA6228600420C63 /* RecapDetectionIntegrationTests.swift in Sources */,
+				4C4419692FA6228600420C63 /* IntroDBClientTests.swift in Sources */,
+				4C44196C2FA6228600420C63 /* SegmentValidatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -234,6 +278,7 @@
 			buildSettings = {
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = IntroStamp;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
@@ -246,10 +291,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = "$(MARKETING_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp;
 				PRODUCT_NAME = IntroStamp;
 				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -257,6 +303,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
@@ -271,6 +318,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp.tests;
 				PRODUCT_NAME = IntroStampTests;
 				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IntroStamp.app/Contents/MacOS/IntroStamp";
 			};
 			name = Debug;
@@ -310,7 +359,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -324,7 +373,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -341,6 +390,7 @@
 			buildSettings = {
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = IntroStamp;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
@@ -353,10 +403,12 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = "$(MARKETING_VERSION)";
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp;
 				PRODUCT_NAME = IntroStamp;
 				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -395,7 +447,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -415,7 +467,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -432,6 +484,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
@@ -446,6 +499,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.fetchbot.introstamp.tests;
 				PRODUCT_NAME = IntroStampTests;
 				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IntroStamp.app/Contents/MacOS/IntroStamp";
 			};
 			name = Release;

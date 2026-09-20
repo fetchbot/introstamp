@@ -101,6 +101,199 @@ actor TMDBClient {
         try await resolveHints(hint, apiKey: apiKey, limit: 1).first
     }
 
+    func fetchGenres(mediaType: MediaType, tmdbId: Int, apiKey: String) async throws -> [String] {
+        let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedKey.isEmpty else {
+            throw TMDBClientError(message: "TMDB API key is missing")
+        }
+
+        let endpoint = mediaType == .movie ? "movie" : "tv"
+        var components = URLComponents(
+            url: baseURL.appending(path: "\(endpoint)/\(tmdbId)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB details URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(cleanedKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        let details = try decoder.decode(TMDBDetailsResponse.self, from: data)
+        return details.genres.map { $0.name }
+    }
+
+    func fetchTVEpisodeReferences(tmdbId: Int, apiKey: String) async throws -> TMDBTVEpisodeReferenceResponse {
+        let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedKey.isEmpty else {
+            throw TMDBClientError(message: "TMDB API key is missing")
+        }
+
+        var components = URLComponents(
+            url: baseURL.appending(path: "tv/\(tmdbId)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB TV details URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(cleanedKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        let details = try decoder.decode(TMDBTVDetailsResponse.self, from: data)
+        let episodes = details.seasons
+            .filter { $0.seasonNumber >= 0 && $0.episodeCount > 0 }
+            .flatMap { season in
+                (1...season.episodeCount).map { episode in
+                    TMDBTVEpisodeReference(season: season.seasonNumber, episode: episode)
+                }
+            }
+
+        return TMDBTVEpisodeReferenceResponse(
+            seriesTitle: details.name ?? "TMDB \(tmdbId)",
+            posterURL: posterURL(path: details.posterPath),
+            episodeRuntimeMinutes: details.episodeRunTime?.first,
+            episodes: episodes
+        )
+    }
+
+    func fetchMovieRuntimeMinutes(tmdbId: Int, apiKey: String) async throws -> Int? {
+        let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedKey.isEmpty else {
+            throw TMDBClientError(message: "TMDB API key is missing")
+        }
+
+        var components = URLComponents(
+            url: baseURL.appending(path: "movie/\(tmdbId)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB movie details URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(cleanedKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        let details = try decoder.decode(TMDBMovieDetailsResponse.self, from: data)
+        return details.runtime
+    }
+
+    func fetchTVEpisodeRuntimeMinutes(tmdbId: Int, season: Int, episode: Int, apiKey: String) async throws -> Int? {
+        let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedKey.isEmpty else {
+            throw TMDBClientError(message: "TMDB API key is missing")
+        }
+
+        var components = URLComponents(
+            url: baseURL.appending(path: "tv/\(tmdbId)/season/\(season)/episode/\(episode)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB TV episode details URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(cleanedKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        let details = try decoder.decode(TMDBTVEpisodeDetailsResponse.self, from: data)
+        return details.runtime
+    }
+
+    func fetchMovieMetadata(tmdbId: Int, apiKey: String) async throws -> TMDBMovieMetadata {
+        let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedKey.isEmpty else {
+            throw TMDBClientError(message: "TMDB API key is missing")
+        }
+
+        var components = URLComponents(
+            url: baseURL.appending(path: "movie/\(tmdbId)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "language", value: "en-US")]
+
+        guard let url = components?.url else {
+            throw TMDBClientError(message: "Failed to build TMDB movie details URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(cleanedKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw TMDBClientError(message: "Invalid TMDB response")
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "TMDB request failed"
+            throw TMDBClientError(message: body)
+        }
+
+        let details = try decoder.decode(TMDBMovieDetailsResponse.self, from: data)
+        return TMDBMovieMetadata(
+            title: details.title ?? "TMDB \(tmdbId)",
+            posterURL: posterURL(path: details.posterPath),
+            runtimeMinutes: details.runtime
+        )
+    }
+
         func search(title: String, mediaType: MediaType, apiKey: String, limit: Int = 10) async throws -> [AutoLookupResult] {
             let cleanedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cleanedKey.isEmpty else {
@@ -250,4 +443,70 @@ private struct TMDBExternalIDsResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case imdbId = "imdb_id"
     }
+}
+
+private struct TMDBDetailsResponse: Decodable {
+    var genres: [TMDBGenre]
+}
+
+struct TMDBTVEpisodeReference: Hashable, Sendable {
+    var season: Int
+    var episode: Int
+}
+
+struct TMDBTVEpisodeReferenceResponse: Sendable {
+    var seriesTitle: String
+    var posterURL: URL?
+    var episodeRuntimeMinutes: Int?
+    var episodes: [TMDBTVEpisodeReference]
+}
+
+struct TMDBMovieMetadata: Sendable {
+    var title: String
+    var posterURL: URL?
+    var runtimeMinutes: Int?
+}
+
+private struct TMDBTVDetailsResponse: Decodable {
+    var name: String?
+    var posterPath: String?
+    var episodeRunTime: [Int]?
+    var seasons: [TMDBTVSeasonSummary]
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case posterPath = "poster_path"
+        case episodeRunTime = "episode_run_time"
+        case seasons
+    }
+}
+
+private struct TMDBMovieDetailsResponse: Decodable {
+    var title: String?
+    var posterPath: String?
+    var runtime: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case posterPath = "poster_path"
+        case runtime
+    }
+}
+
+private struct TMDBTVEpisodeDetailsResponse: Decodable {
+    var runtime: Int?
+}
+
+private struct TMDBTVSeasonSummary: Decodable {
+    var seasonNumber: Int
+    var episodeCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case seasonNumber = "season_number"
+        case episodeCount = "episode_count"
+    }
+}
+
+private struct TMDBGenre: Decodable {
+    var name: String
 }

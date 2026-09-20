@@ -18,10 +18,43 @@ enum SegmentValidator {
     static let maxRecapDurationMs = 1_200_000
     static let maxCreditsDurationMs = 1_800_000
     static let maxPreviewDurationMs = 1_800_000
+    static let minVideoDurationMs = 300_000
 
-    static func makeTheIntroDBSubmissionRequest(from draft: SubmissionDraft) throws -> TheIntroDBSubmissionRequest {
+    static func makeTheIntroDBSubmissionRequest(from draft: SubmissionDraft, videoDurationMs: Int? = nil) throws -> TheIntroDBSubmissionRequest {
         guard draft.tmdbId > 0 else {
             throw SegmentValidationError.message("TMDB ID is required")
+        }
+
+        if let videoDurationMs {
+            try validateVideoDuration(videoDurationMs)
+        }
+
+        // No-segment: bypass time validation and submit a zero-length segment.
+        if draft.isNoSegment {
+            switch draft.mediaType {
+            case .movie:
+                if draft.season != nil || draft.episode != nil {
+                    throw SegmentValidationError.message("Season and episode must be empty for movie submissions")
+                }
+            case .tv:
+                guard let season = draft.season, season >= 0,
+                      let episode = draft.episode, episode > 0
+                else {
+                    throw SegmentValidationError.message("Season and episode are required for TV submissions")
+                }
+            }
+            return TheIntroDBSubmissionRequest(
+                tmdbId: draft.tmdbId,
+                type: draft.mediaType,
+                segment: draft.segment,
+                season: draft.season,
+                episode: draft.episode,
+                startMs: 0,
+                endMs: 0,
+                videoDurationMs: videoDurationMs,
+                tvdbId: nil,
+                imdbId: normalizedImdb(draft.imdbId)
+            )
         }
 
         switch draft.mediaType {
@@ -30,14 +63,14 @@ enum SegmentValidator {
                 throw SegmentValidationError.message("Season and episode must be empty for movie submissions")
             }
         case .tv:
-            guard let season = draft.season, season > 0,
+            guard let season = draft.season, season >= 0,
                   let episode = draft.episode, episode > 0
             else {
                 throw SegmentValidationError.message("Season and episode are required for TV submissions")
             }
         }
 
-        return try validatedTheIntroDBRequest(from: draft)
+        return try validatedTheIntroDBRequest(from: draft, videoDurationMs: videoDurationMs)
     }
 
     // Backward-compatible alias for existing call sites/tests.
@@ -45,7 +78,7 @@ enum SegmentValidator {
         try makeTheIntroDBSubmissionRequest(from: draft)
     }
 
-    static func makeIntroDBSubmissionRequest(from draft: SubmissionDraft) throws -> IntroDBSubmissionRequest {
+    static func makeIntroDBSubmissionRequest(from draft: SubmissionDraft, mediaDurationMs: Int) throws -> IntroDBSubmissionRequest {
         guard draft.mediaType == .tv else {
             throw SegmentValidationError.message("IntroDB supports TV episodes only")
         }
@@ -54,7 +87,7 @@ enum SegmentValidator {
             throw SegmentValidationError.message("Valid IMDB ID is required for IntroDB uploads")
         }
 
-        guard let season = draft.season, season > 0,
+        guard let season = draft.season, season >= 0,
               let episode = draft.episode, episode > 0
         else {
             throw SegmentValidationError.message("Season and episode are required for IntroDB uploads")
@@ -75,10 +108,8 @@ enum SegmentValidator {
             endMs: draft.endMs
         )
 
-        let request = try validatedTheIntroDBRequest(from: normalizedDraft)
-        guard let endMs = request.endMs else {
-            throw SegmentValidationError.message("IntroDB requires an explicit end timestamp")
-        }
+        let request = try validatedTheIntroDBRequest(from: normalizedDraft, videoDurationMs: nil)
+        let endMs = request.endMs ?? mediaDurationMs
 
         return IntroDBSubmissionRequest(
             segmentType: introDBSegment,
@@ -92,20 +123,20 @@ enum SegmentValidator {
         )
     }
 
-    private static func validatedTheIntroDBRequest(from draft: SubmissionDraft) throws -> TheIntroDBSubmissionRequest {
+    private static func validatedTheIntroDBRequest(from draft: SubmissionDraft, videoDurationMs: Int?) throws -> TheIntroDBSubmissionRequest {
         switch draft.segment {
         case .intro:
-            return try validateIntroOrRecap(draft: draft, maxDurationMs: maxIntroDurationMs)
+            return try validateIntroOrRecap(draft: draft, maxDurationMs: maxIntroDurationMs, videoDurationMs: videoDurationMs)
         case .recap:
-            return try validateIntroOrRecap(draft: draft, maxDurationMs: maxRecapDurationMs)
+            return try validateIntroOrRecap(draft: draft, maxDurationMs: maxRecapDurationMs, videoDurationMs: videoDurationMs)
         case .credits:
-            return try validateCreditsOrPreview(draft: draft, maxDurationMs: maxCreditsDurationMs)
+            return try validateCreditsOrPreview(draft: draft, maxDurationMs: maxCreditsDurationMs, videoDurationMs: videoDurationMs)
         case .preview:
-            return try validateCreditsOrPreview(draft: draft, maxDurationMs: maxPreviewDurationMs)
+            return try validateCreditsOrPreview(draft: draft, maxDurationMs: maxPreviewDurationMs, videoDurationMs: videoDurationMs)
         }
     }
 
-    private static func validateIntroOrRecap(draft: SubmissionDraft, maxDurationMs: Int) throws -> TheIntroDBSubmissionRequest {
+    private static func validateIntroOrRecap(draft: SubmissionDraft, maxDurationMs: Int, videoDurationMs: Int?) throws -> TheIntroDBSubmissionRequest {
         let start = max(draft.startMs ?? 0, 0)
         guard let end = draft.endMs else {
             throw SegmentValidationError.message("\(draft.segment.displayName) end is required")
@@ -133,11 +164,13 @@ enum SegmentValidator {
             episode: draft.episode,
             startMs: start,
             endMs: end,
+            videoDurationMs: videoDurationMs,
+            tvdbId: nil,
             imdbId: normalizedImdb(draft.imdbId)
         )
     }
 
-    private static func validateCreditsOrPreview(draft: SubmissionDraft, maxDurationMs: Int) throws -> TheIntroDBSubmissionRequest {
+    private static func validateCreditsOrPreview(draft: SubmissionDraft, maxDurationMs: Int, videoDurationMs: Int?) throws -> TheIntroDBSubmissionRequest {
         guard let start = draft.startMs else {
             throw SegmentValidationError.message("\(draft.segment.displayName) start is required")
         }
@@ -168,8 +201,16 @@ enum SegmentValidator {
             episode: draft.episode,
             startMs: start,
             endMs: draft.endMs,
+            videoDurationMs: videoDurationMs,
+            tvdbId: nil,
             imdbId: normalizedImdb(draft.imdbId)
         )
+    }
+
+    private static func validateVideoDuration(_ value: Int) throws {
+        guard value == 0 || (value >= minVideoDurationMs && value <= maxTimestampMs) else {
+            throw SegmentValidationError.message("video_duration_ms must be 0 or between \(minVideoDurationMs) and \(maxTimestampMs)")
+        }
     }
 
     private static func assertTimestampBounds(_ value: Int) throws {

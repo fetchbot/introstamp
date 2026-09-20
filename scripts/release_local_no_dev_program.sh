@@ -82,8 +82,33 @@ merge_universal_app() {
   done < <(find "$arm_app_dir" -type f -print0)
 }
 
+bump_build_version() {
+  local pbxproj="$PROJECT/project.pbxproj"
+
+  local current
+  current=$(python3 -c "
+import re, sys
+content = open('$pbxproj').read()
+m = re.search(r'MARKETING_VERSION = (\d+\.\d+\.\d+);', content)
+if not m:
+    sys.exit('Could not find MARKETING_VERSION in project.pbxproj')
+print(m.group(1))
+")
+
+  IFS='.' read -r ver_major ver_minor ver_build <<< "$current"
+  local new_version="$ver_major.$ver_minor.$((ver_build + 1))"
+
+  sed -i '' "s/MARKETING_VERSION = $current;/MARKETING_VERSION = $new_version;/g" "$pbxproj"
+
+  echo "Version bumped: $current → $new_version"
+  VERSION="$new_version"
+}
+
 mkdir -p "$OUT_DIR"
 mkdir -p "$ARCHIVE_BASE"
+
+echo "[0/9] Bumping build version..."
+bump_build_version
 
 echo "[1/9] Building arm64 archive..."
 build_archive "$ARM_ARCHIVE_PATH" "arm64"
